@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createInstance, fetchInstanceConnectionState, connectInstance, logoutInstance, setInstanceWebhooks } from "@/lib/evolution-api";
-import { getSingleTenantId } from "@/lib/tenant";
 
 export async function GET(req: NextRequest) {
     try {
         const supabase = await createClient();
-        const organizationId = await getSingleTenantId();
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+        const { data: me } = await supabase.from('profiles').select('organization_id').eq('id', user.id).single();
+        if (!me?.organization_id) return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
+        const organizationId = me.organization_id;
 
         const { data: connections, error } = await supabase
             .from('whatsapp_connections')
@@ -53,8 +58,14 @@ export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
         const { action, instanceName, connectionId } = body;
-        const organizationId = await getSingleTenantId();
         const supabase = await createClient();
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+        const { data: me } = await supabase.from('profiles').select('organization_id').eq('id', user.id).single();
+        if (!me?.organization_id) return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
+        const organizationId = me.organization_id;
 
         // 1. Create a new connection
         if (action === 'CREATE') {
