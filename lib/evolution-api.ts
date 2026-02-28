@@ -8,33 +8,49 @@
 // Como estamos construindo para um cenário onde a API da Evolution estará externa,
 // e que o usuário ainda não colocou a URL e Token no .env, vamos usar variáveis 
 // de ambiente para essas rotas.
-const EVO_API_URL = process.env.EVOLUTION_API_URL || 'http://localhost:8080';
-const EVO_GLOBAL_API_KEY = process.env.EVOLUTION_GLOBAL_API_KEY || 'SUA_API_KEY_GLOBAL_AQUI';
+const getEvoConfig = () => {
+    const url = process.env.EVOLUTION_API_URL || 'http://localhost:8080';
+    // Remove trailing slashes
+    const cleanUrl = url.endsWith('/') ? url.slice(0, -1) : url;
+    return {
+        url: cleanUrl,
+        key: process.env.EVOLUTION_GLOBAL_API_KEY || 'SUA_API_KEY_GLOBAL_AQUI'
+    };
+};
 
 /**
  * Cria uma nova instância na Evolution API
  * @param instanceName O nome da instância (ex: 'wa-crm-123')
  */
 export async function createInstance(instanceName: string) {
-    const response = await fetch(`${EVO_API_URL}/instance/create`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'apikey': EVO_GLOBAL_API_KEY,
-        },
-        body: JSON.stringify({
-            instanceName,
-            qrcode: true,
-            integration: 'WHATSAPP-BAILEYS',
-        }),
-    });
+    const config = getEvoConfig();
+    console.log(`[Evolution] Calling createInstance at ${config.url}/instance/create`);
 
-    if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Erro ao criar instância no WhatsApp API');
+    try {
+        const response = await fetch(`${config.url}/instance/create`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': config.key,
+            },
+            body: JSON.stringify({
+                instanceName,
+                qrcode: true,
+                integration: 'WHATSAPP-BAILEYS',
+            }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ message: response.statusText }));
+            console.error('[Evolution] Error creating instance:', error);
+            throw new Error(error.message || `API Error: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (e: any) {
+        console.error('[Evolution] Network fetch failed:', e);
+        throw new Error(`Evolution API Inacessível: ${e.message}`);
     }
-
-    return response.json();
 }
 
 /**
@@ -42,10 +58,11 @@ export async function createInstance(instanceName: string) {
  * @param instanceName O nome da instância
  */
 export async function fetchInstanceConnectionState(instanceName: string) {
-    const response = await fetch(`${EVO_API_URL}/instance/connectionState/${instanceName}`, {
+    const config = getEvoConfig();
+    const response = await fetch(`${config.url}/instance/connectionState/${instanceName}`, {
         method: 'GET',
         headers: {
-            'apikey': EVO_GLOBAL_API_KEY,
+            'apikey': config.key,
         },
     });
 
@@ -61,10 +78,11 @@ export async function fetchInstanceConnectionState(instanceName: string) {
  * Caso a instância já esteja 'open' (conectada), isso vai dar erro, logo deve ser tratado no frontend
  */
 export async function connectInstance(instanceName: string) {
-    const response = await fetch(`${EVO_API_URL}/instance/connect/${instanceName}`, {
+    const config = getEvoConfig();
+    const response = await fetch(`${config.url}/instance/connect/${instanceName}`, {
         method: 'GET',
         headers: {
-            'apikey': EVO_GLOBAL_API_KEY,
+            'apikey': config.key,
         },
     });
 
@@ -81,10 +99,11 @@ export async function connectInstance(instanceName: string) {
  * @param instanceName O nome da instância a ser desconectada
  */
 export async function logoutInstance(instanceName: string) {
-    const response = await fetch(`${EVO_API_URL}/instance/logout/${instanceName}`, {
+    const config = getEvoConfig();
+    const response = await fetch(`${config.url}/instance/logout/${instanceName}`, {
         method: 'DELETE',
         headers: {
-            'apikey': EVO_GLOBAL_API_KEY,
+            'apikey': config.key,
         },
     });
 
@@ -102,11 +121,18 @@ export async function logoutInstance(instanceName: string) {
  * @param crmWebhookUrl A URL /api/whatsapp/webhook do CRM
  */
 export async function setInstanceWebhooks(instanceName: string, crmWebhookUrl: string) {
-    const response = await fetch(`${EVO_API_URL}/webhook/set/${instanceName}`, {
+    const config = getEvoConfig();
+
+    // Check if the webhook URL is localhost. Evolution API won't fire local webhooks easily unless tunneled
+    if (crmWebhookUrl.includes('localhost')) {
+        console.warn(`[Evolution] Localhost webhook detected (${crmWebhookUrl}). The Evolution API might not be able to reach it.`);
+    }
+
+    const response = await fetch(`${config.url}/webhook/set/${instanceName}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'apikey': EVO_GLOBAL_API_KEY,
+            'apikey': config.key,
         },
         body: JSON.stringify({
             url: crmWebhookUrl,
@@ -135,11 +161,12 @@ export async function setInstanceWebhooks(instanceName: string, crmWebhookUrl: s
  * @param text O conteúdo da mensagem
  */
 export async function sendWhatsAppMessage(instanceName: string, number: string, text: string) {
-    const response = await fetch(`${EVO_API_URL}/message/sendText/${instanceName}`, {
+    const config = getEvoConfig();
+    const response = await fetch(`${config.url}/message/sendText/${instanceName}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'apikey': EVO_GLOBAL_API_KEY,
+            'apikey': config.key,
         },
         body: JSON.stringify({
             number,

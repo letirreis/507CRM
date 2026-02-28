@@ -21,7 +21,8 @@ export async function GET(req: NextRequest) {
         if (error) throw error;
 
         // Refresh status by checking Evolution API
-        for (const connection of connections) {
+        // Non-blocking: if Evolution is down, we still return the DB connections
+        const updatedConnections = await Promise.all(connections.map(async (connection) => {
             try {
                 const state = await fetchInstanceConnectionState(connection.instance_name);
                 const statusMap: Record<string, string> = {
@@ -38,7 +39,9 @@ export async function GET(req: NextRequest) {
                     connection.status = currentEvoStatus;
                 }
             } catch (e) {
-                console.log(`Failed to fetch state for ${connection.instance_name}`);
+                console.log(`[Evolution Sync] Failed to fetch state for ${connection.instance_name}`);
+                // Only update to DISCONNECTED if we really know it's disconnected,
+                // or leave as is if we just can't reach the API. Here we assume it's offline.
                 if (connection.status !== 'DISCONNECTED') {
                     await supabase.from('whatsapp_connections')
                         .update({ status: 'DISCONNECTED' })
@@ -46,11 +49,13 @@ export async function GET(req: NextRequest) {
                     connection.status = 'DISCONNECTED';
                 }
             }
-        }
+            return connection;
+        }));
 
-        return NextResponse.json({ connections });
+        return NextResponse.json({ connections: updatedConnections });
     } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        console.error('[Connections GET Error]', error);
+        return NextResponse.json({ error: error.message || 'Error fetching connections' }, { status: 500 });
     }
 }
 
@@ -69,29 +74,37 @@ export async function POST(req: NextRequest) {
 
         // 1. Create a new connection
         if (action === 'CREATE') {
-            const dbInstanceName = instanceName || `crm-${organizationId.substring(0, 8)}-${Date.now()}`;
+            try {
+                const dbInstanceName = instanceName || `crm-${organizationId.substring(0, 8)}-${Date.now()}`;
 
-            // Call Evolution API
-            const evoRes = await createInstance(dbInstanceName);
+                // Call Evolution API
+                const evoRes = await createInstance(dbInstanceName);
 
-            // Set webhooks right after creation
-            const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-            await setInstanceWebhooks(dbInstanceName, `${appUrl}/api/whatsapp/webhook`);
+                // Set webhooks right after creation
+                const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+                await setInstanceWebhooks(dbInstanceName, `${appUrl}/api/whatsapp/webhook`).catch(e => {
+                    console.error('[Evolution] Failed to set webhook, but instance created.', e);
+                });
 
-            // Save to Supabase
-            const { data, error } = await supabase
-                .from('whatsapp_connections')
-                .insert({
-                    organization_id: organizationId,
-                    instance_name: dbInstanceName,
-                    instance_id: evoRes?.instance?.instanceName || dbInstanceName,
-                    status: 'DISCONNECTED',
-                })
-                .select('*')
-                .single();
+                // Save to Supabase
+                const { data, error } = await supabase
+                    .from('whatsapp_connections')
+                    .insert({
+                        organization_id: organizationId,
+                        instance_name: dbInstanceName,
+                        instance_id: evoRes?.instance?.instanceName || dbInstanceName,
+                        status: 'DISCONNECTED',
+                    })
+                    .select('*')
+                    .single();
 
-            if (error) throw error;
-            return NextResponse.json({ connection: data });
+                if (error) throw error;
+                return NextResponse.json({ connection: data });
+            } catch (e: any) {
+                console.error('[Connections CREATE Error]', e);
+                // Return a specific 502 Bad Gateway if the external Evolution API is down
+                return NextResponse.json({ error: e.message || 'Failed to create instance on Evolution API' }, { status: 502 });
+            }
         }
 
         // 2. Generate QR Code
@@ -104,8 +117,10 @@ export async function POST(req: NextRequest) {
                         .eq('id', connectionId);
                     return NextResponse.json({ qrCode: qrData.base64 });
                 }
+                return NextResponse.json({ error: 'Nenhum QR Code retornado pela API.' }, { status: 400 });
             } catch (e: any) {
-                return NextResponse.json({ error: e.message }, { status: 400 });
+                console.error('[Connections GENERATE_QR Error]', e);
+                return NextResponse.json({ error: e.message || 'Evolution API inacessível para gerar QR Code' }, { status: 502 });
             }
         }
 
@@ -126,6 +141,7 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     } catch (error: any) {
+        console.error('[Connections POST Global Error]', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
