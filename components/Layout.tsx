@@ -43,7 +43,8 @@ import {
   Bug,
   PanelLeftClose,
   PanelLeftOpen,
-  MessageCircle
+  MessageCircle,
+  CheckSquare
 } from 'lucide-react';
 import { useCRM } from '../context/CRMContext';
 import { useAuth } from '../context/AuthContext';
