@@ -45,24 +45,26 @@ export function ChatLayout() {
         const channel = supabase
             .channel('whatsapp_updates')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_messages' }, payload => {
-                if (payload.new) {
+                const newRecord = payload.new as any;
+                if (newRecord) {
                     setMessages(prev => {
-                        const isDuplicate = prev.some(m => m.id === payload.new.id);
+                        const isDuplicate = prev.some(m => m.id === newRecord.id);
                         if (isDuplicate) return prev;
-                        return [...prev, payload.new];
+                        return [...prev, newRecord];
                     });
                     scrollToBottom();
                 }
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_chats' }, payload => {
-                if (payload.new) {
+                const newRecord = payload.new as any;
+                if (newRecord) {
                     setChats(prev => {
-                        const existing = prev.find(c => c.id === payload.new.id);
+                        const existing = prev.find(c => c.id === newRecord.id);
                         if (existing) {
-                            return prev.map(c => c.id === payload.new.id ? payload.new : c)
+                            return prev.map(c => c.id === newRecord.id ? newRecord : c)
                                 .sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime());
                         }
-                        return [payload.new, ...prev];
+                        return [newRecord, ...prev];
                     });
                 }
             })
