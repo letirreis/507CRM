@@ -4,16 +4,16 @@ export type WhatsAppConnectionStatus = 'CONNECTING' | 'CONNECTED' | 'DISCONNECTE
 
 export interface WhatsAppConnection {
     id: string;
-    organizationId: OrganizationId;
-    instanceName: string;
-    instanceId: string;
-    phoneNumber?: string;
+    organization_id: OrganizationId;
+    instance_name: string;
+    instance_id: string;
+    phone_number?: string;
     profileName?: string;
     profilePicUrl?: string;
     status: WhatsAppConnectionStatus;
-    qrCode?: string;
-    createdAt: string;
-    updatedAt: string;
+    qr_code?: string;
+    created_at: string;
+    updated_at: string;
 }
 
 export type WhatsAppChatStatus = 'OPEN' | 'CLOSED';
