@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
                             last_message_text: textContent,
                             last_message_at: new Date().toISOString()
                         })
-                        .select('id')
+                        .select('id, unread_count')
                         .single();
                     chat = newChat;
                 } else {
