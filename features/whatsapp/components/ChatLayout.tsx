@@ -21,6 +21,7 @@ export function ChatLayout() {
     }, []);
 
     const fetchChats = async () => {
+        if (!supabase) return;
         const { data } = await supabase
             .from('whatsapp_chats')
             .select('*')
@@ -29,6 +30,7 @@ export function ChatLayout() {
     };
 
     const fetchMessages = async (chatId: string) => {
+        if (!supabase) return;
         const { data } = await supabase
             .from('whatsapp_messages')
             .select('*')
@@ -39,6 +41,7 @@ export function ChatLayout() {
     };
 
     const setupRealtime = () => {
+        if (!supabase) return () => { };
         const channel = supabase
             .channel('whatsapp_updates')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_messages' }, payload => {
