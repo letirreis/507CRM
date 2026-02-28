@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, QrCode, Smartphone, Trash2 } from 'lucide-react';
-import { useToast } from '@/components/ui/use-toast';
 import { WhatsAppConnection } from '@/types/whatsapp';
 
 export function WhatsAppSettings() {
@@ -13,7 +12,6 @@ export function WhatsAppSettings() {
     const [loading, setLoading] = useState(true);
     const [qrCode, setQrCode] = useState<string | null>(null);
     const [loadingAction, setLoadingAction] = useState<string | null>(null);
-    const { toast } = useToast();
 
     const fetchConnections = async () => {
         try {
@@ -53,12 +51,11 @@ export function WhatsAppSettings() {
             });
             const data = await res.json();
             if (data.error) throw new Error(data.error);
-            toast({ title: 'Instância criada!', description: 'Gerando QR Code...' });
 
             // Auto-trigger QR generation
             handleGenerateQr(data.connection.id, data.connection.instance_name);
         } catch (e: any) {
-            toast({ title: 'Erro', description: e.message, variant: 'destructive' });
+            alert(`Erro: ${e.message}`);
         } finally {
             setLoadingAction(null);
             fetchConnections();
@@ -76,9 +73,8 @@ export function WhatsAppSettings() {
             const data = await res.json();
             if (data.error) throw new Error(data.error);
             setQrCode(data.qrCode);
-            toast({ title: 'QR Code Gerado', description: 'Escaneie com seu WhatsApp.' });
         } catch (e: any) {
-            toast({ title: 'Erro ao gerar QR', description: e.message, variant: 'destructive' });
+            alert(`Erro ao gerar QR: ${e.message}`);
         } finally {
             setLoadingAction(null);
             fetchConnections();
@@ -96,9 +92,8 @@ export function WhatsAppSettings() {
             const data = await res.json();
             if (data.error) throw new Error(data.error);
             setQrCode(null);
-            toast({ title: 'Desconectado', description: 'A instância foi removida do aparelho.' });
         } catch (e: any) {
-            toast({ title: 'Erro', description: e.message, variant: 'destructive' });
+            alert(`Erro: ${e.message}`);
         } finally {
             setLoadingAction(null);
             fetchConnections();

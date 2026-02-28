@@ -2,9 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Search, Send, File, Check, CheckCheck } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { CRMActionPanel } from './CRMActionPanel';
@@ -112,10 +110,10 @@ export function ChatLayout() {
                     <h2 className="font-semibold text-lg mb-4">Conversas</h2>
                     <div className="relative">
                         <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
-                        <Input placeholder="Buscar contatos..." className="pl-9" />
+                        <input placeholder="Buscar contatos..." className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 pl-9" />
                     </div>
                 </div>
-                <ScrollArea className="flex-1">
+                <div className="flex-1 overflow-y-auto">
                     {chats.map(chat => (
                         <div
                             key={chat.id}
@@ -145,7 +143,7 @@ export function ChatLayout() {
                             )}
                         </div>
                     ))}
-                </ScrollArea>
+                </div>
             </div>
 
             {/* MAIN CHAT AREA */}
@@ -187,11 +185,12 @@ export function ChatLayout() {
                                 <Button type="button" variant="ghost" size="icon" className="shrink-0 text-muted-foreground">
                                     <File className="w-5 h-5" />
                                 </Button>
-                                <Input
+                                <input
+                                    type="text"
                                     value={messageInput}
                                     onChange={e => setMessageInput(e.target.value)}
                                     placeholder="Digite uma mensagem..."
-                                    className="flex-1 bg-muted/50 border-transparent focus-visible:ring-1"
+                                    className="flex h-9 w-full rounded-md border border-input px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 flex-1 bg-muted/50 border-transparent focus-visible:ring-1"
                                 />
                                 <Button type="submit" size="icon" disabled={!messageInput.trim()} className="shrink-0 bg-green-500 hover:bg-green-600 outline-none">
                                     <Send className="w-4 h-4" />
