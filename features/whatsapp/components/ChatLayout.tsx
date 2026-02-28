@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Search, Send, File, Check, CheckCheck } from 'lucide-react';
+import { Search, Send, File, Check, CheckCheck, Settings } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { CRMActionPanel } from './CRMActionPanel';
 
@@ -13,6 +14,7 @@ export function ChatLayout() {
     const [activeChat, setActiveChat] = useState<any>(null);
     const [messageInput, setMessageInput] = useState('');
     const scrollRef = useRef<HTMLDivElement>(null);
+    const router = useRouter();
     const supabase = createClient();
 
     useEffect(() => {
@@ -112,7 +114,12 @@ export function ChatLayout() {
             {/* SIDEBAR: CHATS LIST */}
             <div className="w-80 border-r flex flex-col bg-muted/10">
                 <div className="p-4 border-b bg-background">
-                    <h2 className="font-semibold text-lg mb-4">Conversas</h2>
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="font-semibold text-lg">Conversas</h2>
+                        <Button variant="ghost" size="icon" onClick={() => router.push('/whatsapp')} title="Configurações do WhatsApp">
+                            <Settings className="w-5 h-5 text-muted-foreground" />
+                        </Button>
+                    </div>
                     <div className="relative">
                         <Search className="w-4 h-4 absolute left-3 top-3 text-muted-foreground" />
                         <input placeholder="Buscar contatos..." className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 pl-9" />
