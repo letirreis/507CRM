@@ -135,15 +135,34 @@ export async function setInstanceWebhooks(instanceName: string, crmWebhookUrl: s
             'apikey': config.key,
         },
         body: JSON.stringify({
-            url: crmWebhookUrl,
-            webhookByEvents: false,
-            webhookBase64: false, // se quiser baixar medias por webhook, mude para true (cuidado com payload size)
-            events: [
-                'MESSAGES_UPSERT',       // novas mensagens recebidas
-                'SEND_MESSAGE',          // quando você envia uma mensagem (para salvar no BD)
-                'CONNECTION_UPDATE',     // quando o QR code é lido ou cai a conexão
-                'CALL'                   // se quiser tratar ligações do whatsapp
-            ],
+            webhook: {
+                url: crmWebhookUrl,
+                byEvents: false,
+                base64: false,
+                readMessage: true,
+                events: [
+                    'APPLICATION_STARTUP',
+                    'QRCODE_UPDATED',
+                    'MESSAGES_UPSERT',
+                    'MESSAGES_UPDATE',
+                    'MESSAGES_DELETE',
+                    'SEND_MESSAGE',
+                    'CONTACTS_SET',
+                    'CONTACTS_UPSERT',
+                    'CONTACTS_UPDATE',
+                    'PRESENCE_UPDATE',
+                    'CHATS_SET',
+                    'CHATS_UPSERT',
+                    'CHATS_UPDATE',
+                    'CHATS_DELETE',
+                    'GROUPS_UPSERT',
+                    'GROUP_UPDATE',
+                    'GROUP_PARTICIPANTS_UPDATE',
+                    'CONNECTION_UPDATE',
+                    'CALL',
+                    'NEW_JWT_TOKEN'
+                ],
+            }
         }),
     });
 
