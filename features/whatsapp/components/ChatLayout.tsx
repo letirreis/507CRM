@@ -19,8 +19,12 @@ export function ChatLayout() {
 
     useEffect(() => {
         fetchChats();
-        setupRealtime();
     }, []);
+
+    useEffect(() => {
+        const cleanup = setupRealtime();
+        return cleanup;
+    }, [activeChat]); // Re-bind realtime when activeChat changes to prevent cross-contamination
 
     const fetchChats = async () => {
         if (!supabase) return;
@@ -49,12 +53,15 @@ export function ChatLayout() {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_messages' }, payload => {
                 const newRecord = payload.new as any;
                 if (newRecord) {
-                    setMessages(prev => {
-                        const isDuplicate = prev.some(m => m.id === newRecord.id);
-                        if (isDuplicate) return prev;
-                        return [...prev, newRecord];
-                    });
-                    scrollToBottom();
+                    // Previne que mensagens de um chat apareçam na tela do chat de outro contato
+                    if (activeChat && newRecord.chat_id === activeChat.id) {
+                        setMessages(prev => {
+                            const isDuplicate = prev.some(m => m.id === newRecord.id);
+                            if (isDuplicate) return prev;
+                            return [...prev, newRecord];
+                        });
+                        scrollToBottom();
+                    }
                 }
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'whatsapp_chats' }, payload => {
@@ -177,7 +184,7 @@ export function ChatLayout() {
                         <div className="flex-1 p-6 overflow-y-auto space-y-4" ref={scrollRef}>
                             {messages.map(msg => (
                                 <div key={msg.id} className={`flex ${msg.is_from_me ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[75%] rounded-lg p-3 ${msg.is_from_me ? 'bg-primary text-primary-foreground rounded-tr-none' : 'bg-background border rounded-tl-none shadow-sm'}`}>
+                                    <div className={`w-fit max-w-[75%] rounded-lg p-3 ${msg.is_from_me ? 'bg-primary text-primary-foreground rounded-tr-none' : 'bg-background border rounded-tl-none shadow-sm'}`}>
                                         {/* Reply Content (if we supported replies) */}
                                         <p className="text-sm break-words">{msg.content}</p>
                                         <div className={`text-[10px] mt-1 flex justify-end items-center gap-1 ${msg.is_from_me ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>

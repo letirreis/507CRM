@@ -3,10 +3,142 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tag, UserPlus, Briefcase, Bot } from 'lucide-react';
+import { Tag, UserPlus, Briefcase, Bot, Loader2 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import { useState } from 'react';
 
 export function CRMActionPanel({ chat }: { chat: any }) {
+    const [isLoadingContact, setIsLoadingContact] = useState(false);
+    const [isLoadingDeal, setIsLoadingDeal] = useState(false);
+    const supabase = createClient();
+
     if (!chat) return null;
+
+    const handleSaveContact = async () => {
+        setIsLoadingContact(true);
+        try {
+            const { data: userData } = await supabase.auth.getUser();
+            if (!userData.user) throw new Error('Not authenticated');
+
+            // 1. Criar o contato no CRM
+            const { data: newContact, error: contactError } = await supabase
+                .from('contacts')
+                .insert({
+                    name: chat.name || chat.phone_number,
+                    phone: chat.phone_number,
+                    organization_id: chat.organization_id,
+                    owner_id: userData.user.id,
+                    source: 'WhatsApp'
+                })
+                .select()
+                .single();
+
+            if (contactError) throw contactError;
+
+            // 2. Vincular o contato ao Chat
+            await supabase
+                .from('whatsapp_chats')
+                .update({ contact_id: newContact.id })
+                .eq('id', chat.id);
+
+        } catch (error) {
+            console.error('Error saving contact:', error);
+            alert('Erro ao salvar contato.');
+        } finally {
+            setIsLoadingContact(false);
+        }
+    };
+
+    const handleCreateDeal = async () => {
+        setIsLoadingDeal(true);
+        try {
+            const { data: userData } = await supabase.auth.getUser();
+            if (!userData.user) throw new Error('Not authenticated');
+
+            let finalContactId = chat.contact_id;
+
+            // Se não tem contato ainda, cria na hora
+            if (!finalContactId) {
+                const { data: newContact } = await supabase
+                    .from('contacts')
+                    .insert({
+                        name: chat.name || chat.phone_number,
+                        phone: chat.phone_number,
+                        organization_id: chat.organization_id,
+                        owner_id: userData.user.id,
+                        source: 'WhatsApp'
+                    }).select().single();
+
+                if (newContact) {
+                    finalContactId = newContact.id;
+                    await supabase.from('whatsapp_chats').update({ contact_id: newContact.id }).eq('id', chat.id);
+                }
+            }
+
+            // Criar o Deal
+            const { data: newDeal, error: dealError } = await supabase
+                .from('deals')
+                .insert({
+                    title: `Negociação: ${chat.name || chat.phone_number}`,
+                    contact_id: finalContactId,
+                    organization_id: chat.organization_id,
+                    owner_id: userData.user.id,
+                    priority: 'medium',
+                    status: 'active'
+                })
+                .select()
+                .single();
+
+            if (dealError) throw dealError;
+
+            // Vincular o Deal ao Chat
+            await supabase
+                .from('whatsapp_chats')
+                .update({ deal_id: newDeal.id })
+                .eq('id', chat.id);
+
+        } catch (error) {
+            console.error('Error creating deal:', error);
+            alert('Erro ao criar negociação.');
+        } finally {
+            setIsLoadingDeal(false);
+        }
+    };
+
+    const handleAddTag = async () => {
+        const newTag = window.prompt('Digite o nome da nova tag:');
+        if (!newTag || !newTag.trim()) return;
+
+        const currentTags = chat.tags || [];
+        if (currentTags.includes(newTag.trim())) return;
+
+        const updatedTags = [...currentTags, newTag.trim()];
+
+        try {
+            await supabase
+                .from('whatsapp_chats')
+                .update({ tags: updatedTags })
+                .eq('id', chat.id);
+        } catch (error) {
+            console.error('Error adding tag:', error);
+            alert('Erro ao adicionar tag.');
+        }
+    };
+
+    const handleRemoveTag = async (tagToRemove: string) => {
+        const currentTags = chat.tags || [];
+        const updatedTags = currentTags.filter((t: string) => t !== tagToRemove);
+
+        try {
+            await supabase
+                .from('whatsapp_chats')
+                .update({ tags: updatedTags })
+                .eq('id', chat.id);
+        } catch (error) {
+            console.error('Error removing tag:', error);
+            alert('Erro ao remover tag.');
+        }
+    };
 
     return (
         <div className="w-80 border-l bg-background hidden lg:block overflow-y-auto">
@@ -44,8 +176,8 @@ export function CRMActionPanel({ chat }: { chat: any }) {
                                 <span>Contato Sincronizado</span>
                             </div>
                         ) : (
-                            <Button variant="outline" className="w-full" size="sm">
-                                <UserPlus className="w-4 h-4 mr-2" />
+                            <Button variant="outline" className="w-full" size="sm" onClick={handleSaveContact} disabled={isLoadingContact}>
+                                {isLoadingContact ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <UserPlus className="w-4 h-4 mr-2" />}
                                 Salvar no CRM
                             </Button>
                         )}
@@ -56,8 +188,8 @@ export function CRMActionPanel({ chat }: { chat: any }) {
                                 <span>Em Negociação</span>
                             </div>
                         ) : (
-                            <Button variant="outline" className="w-full" size="sm">
-                                <Briefcase className="w-4 h-4 mr-2" />
+                            <Button variant="outline" className="w-full" size="sm" onClick={handleCreateDeal} disabled={isLoadingDeal}>
+                                {isLoadingDeal ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Briefcase className="w-4 h-4 mr-2" />}
                                 Criar Deal
                             </Button>
                         )}
@@ -70,9 +202,14 @@ export function CRMActionPanel({ chat }: { chat: any }) {
                         <Tag className="w-4 h-4" /> Tags
                     </h4>
                     <div className="flex flex-wrap gap-2">
-                        <Badge variant="secondary">Nova Lead</Badge>
-                        <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pendente</Badge>
-                        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs border border-dashed text-muted-foreground w-full mt-2">
+                        {chat.tags && chat.tags.map((tag: string) => (
+                            <span key={tag} onClick={() => handleRemoveTag(tag)} title="Clique para remover">
+                                <Badge variant="secondary" className="cursor-pointer hover:bg-destructive hover:text-white">
+                                    {tag}
+                                </Badge>
+                            </span>
+                        ))}
+                        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs border border-dashed text-muted-foreground w-full mt-2" onClick={handleAddTag}>
                             + Adicionar Tag
                         </Button>
                     </div>
