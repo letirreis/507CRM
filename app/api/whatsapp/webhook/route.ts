@@ -29,6 +29,9 @@ export async function POST(req: NextRequest) {
         const { event, instance, data } = body;
         const instanceName = instance; // Ex: 'crm-user-123'
 
+        // As versões mais novas da Evolution devolvem "messages.upsert" em vez de "MESSAGES_UPSERT".
+        const normalizedEvent = typeof event === 'string' ? event.replace(/\./g, '_').toUpperCase() : event;
+
         // Find connection to get organization_id
         const { data: connection } = await supabase
             .from('whatsapp_connections')
@@ -42,7 +45,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Handle incoming messages
-        if (event === 'MESSAGES_UPSERT') {
+        if (normalizedEvent === 'MESSAGES_UPSERT') {
             const messages = data.messages || [];
 
             for (const rawMsg of messages) {
@@ -130,7 +133,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Handle Connection Updates (QR Code Scan, Disconnect, etc)
-        else if (event === 'CONNECTION_UPDATE') {
+        else if (normalizedEvent === 'CONNECTION_UPDATE') {
             const state = data.state; // open, connecting, close
             const qrCode = data.qr; // se state == connecting, pode ter um base64
 
@@ -152,7 +155,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Handle Message Status Updates (Read Receipts, etc)
-        else if (event === 'SEND_MESSAGE') {
+        else if (normalizedEvent === 'SEND_MESSAGE') {
             // evolution sends this when our API sends a message out.
             // It can be handled to mark double-ticks
         }
