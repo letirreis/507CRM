@@ -43,7 +43,12 @@ export async function POST(req: NextRequest) {
 
             for (const rawMsg of messages) {
                 // Ignorar status de broadcast ou status_update
-                if (!rawMsg.message || rawMsg.key.remoteJid === 'status@broadcast') continue;
+                if (!rawMsg.message || rawMsg.key.remoteJid === 'status@broadcast') {
+                    console.log('[Webhook] Skipped message:', rawMsg.key.remoteJid, 'has message:', !!rawMsg.message);
+                    continue;
+                }
+
+                console.log('[Webhook] Processing message:', JSON.stringify(rawMsg, null, 2));
 
                 const isFromMe = rawMsg.key.fromMe;
                 const remoteJid = rawMsg.key.remoteJid;
@@ -59,6 +64,8 @@ export async function POST(req: NextRequest) {
                     '';
 
                 const messageType = Object.keys(rawMsg.message)[0].replace('Message', '');
+
+                console.log(`[Webhook] Extracted text: "${textContent}", Type: ${messageType}`);
 
                 // 1. Encontrar ou criar o Chat
                 let { data: chat } = await supabase
