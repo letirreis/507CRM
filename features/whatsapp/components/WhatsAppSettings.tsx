@@ -100,6 +100,24 @@ export function WhatsAppSettings() {
         }
     };
 
+    const handleSyncWebhooks = async (instanceName: string) => {
+        setLoadingAction('sync_webhook');
+        try {
+            const res = await fetch('/api/whatsapp/connections', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'SYNC_WEBHOOK', instanceName })
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            alert(`Webhooks sincronizados com sucesso para: ${data.webhookUrl}`);
+        } catch (e: any) {
+            alert(`Erro ao sincronizar webhooks: ${e.message}`);
+        } finally {
+            setLoadingAction(null);
+        }
+    };
+
     if (loading && connections.length === 0) {
         return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary" /></div>;
     }
@@ -201,9 +219,15 @@ export function WhatsAppSettings() {
                         </Button>
 
                         {primaryConnection.status === 'CONNECTED' && (
-                            <Button variant="outline" onClick={() => window.location.href = '/whatsapp/chat'}>
-                                Ir para Conversas
-                            </Button>
+                            <div className="flex gap-2">
+                                <Button variant="outline" onClick={() => handleSyncWebhooks(primaryConnection.instance_name)} disabled={loadingAction === 'sync_webhook'}>
+                                    {loadingAction === 'sync_webhook' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                                    Sincronizar Webhooks
+                                </Button>
+                                <Button onClick={() => window.location.href = '/whatsapp/chat'}>
+                                    Ir para Conversas
+                                </Button>
+                            </div>
                         )}
                     </CardFooter>
                 )}

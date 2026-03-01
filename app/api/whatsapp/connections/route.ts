@@ -139,6 +139,19 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ success: true });
         }
 
+        // 4. Manual Webhook Sync
+        if (action === 'SYNC_WEBHOOK') {
+            try {
+                const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+                const webhookUrl = `${appUrl}/api/whatsapp/webhook`;
+                await setInstanceWebhooks(instanceName, webhookUrl);
+                return NextResponse.json({ success: true, webhookUrl });
+            } catch (e: any) {
+                console.error('[Connections SYNC_WEBHOOK Error]', e);
+                return NextResponse.json({ error: e.message || 'Falha ao sincronizar webhooks.' }, { status: 502 });
+            }
+        }
+
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     } catch (error: any) {
         console.error('[Connections POST Global Error]', error);
