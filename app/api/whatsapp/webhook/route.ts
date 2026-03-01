@@ -15,6 +15,10 @@ export async function POST(req: NextRequest) {
 
         const body = await req.json();
 
+        console.log('\n\n=========================================');
+        console.log('[Webhook RECEIVED RAW BODY]:', JSON.stringify(body, null, 2));
+        console.log('=========================================\n\n');
+
         // Webhook auth check - you should define a global secret in Evolution API
         const authHeader = req.headers.get('apikey');
         // Temporarily bypassing strict API Key check because Evolution might not be sending it properly depending on webhook setup version
