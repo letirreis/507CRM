@@ -136,6 +136,7 @@ export async function setInstanceWebhooks(instanceName: string, crmWebhookUrl: s
         },
         body: JSON.stringify({
             webhook: {
+                enabled: true,
                 url: crmWebhookUrl,
                 byEvents: false,
                 base64: false,
@@ -167,7 +168,9 @@ export async function setInstanceWebhooks(instanceName: string, crmWebhookUrl: s
     });
 
     if (!response.ok) {
-        throw new Error('Erro ao configurar webhooks na instância');
+        const errorData = await response.json().catch(() => ({ message: response.statusText }));
+        console.error('[Evolution Webhook Set Error]:', errorData);
+        throw new Error(`[Evolution API]: ${errorData.message || JSON.stringify(errorData)}`);
     }
 
     return response.json();
