@@ -146,19 +146,7 @@ export async function setInstanceWebhooks(instanceName: string, crmWebhookUrl: s
                     'QRCODE_UPDATED',
                     'MESSAGES_UPSERT',
                     'MESSAGES_UPDATE',
-                    'MESSAGES_DELETE',
-                    'SEND_MESSAGE',
-                    'CONTACTS_UPSERT',
-                    'CONTACTS_UPDATE',
-                    'PRESENCE_UPDATE',
-                    'CHATS_UPSERT',
-                    'CHATS_UPDATE',
-                    'CHATS_DELETE',
-                    'GROUPS_UPSERT',
-                    'GROUP_UPDATE',
-                    'GROUP_PARTICIPANTS_UPDATE',
-                    'CONNECTION_UPDATE',
-                    'CALL'
+                    'CONNECTION_UPDATE'
                 ],
             }
         }),

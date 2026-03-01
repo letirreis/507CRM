@@ -15,10 +15,6 @@ export async function POST(req: NextRequest) {
 
         const body = await req.json();
 
-        console.log('\n\n=========================================');
-        console.log('[Webhook RECEIVED RAW BODY]:', JSON.stringify(body, null, 2));
-        console.log('=========================================\n\n');
-
         // Webhook auth check - you should define a global secret in Evolution API
         const authHeader = req.headers.get('apikey');
         // Temporarily bypassing strict API Key check because Evolution might not be sending it properly depending on webhook setup version
@@ -69,10 +65,16 @@ export async function POST(req: NextRequest) {
 
                 console.log('[Webhook] Processing message:', JSON.stringify(rawMsg, null, 2));
 
-                const isFromMe = rawMsg.key.fromMe;
-                const remoteJid = rawMsg.key.remoteJid;
-                const messageId = rawMsg.key.id;
-                const pushName = rawMsg.pushName || remoteJid.split('@')[0];
+                const isFromMe = rawMsg.key?.fromMe;
+                const remoteJid = rawMsg.key?.remoteJid;
+
+                // PERFORMANCE: Ignorar todos as mensagens que vêm de Grupos do WhatsApp (@g.us)
+                if (remoteJid?.endsWith('@g.us')) {
+                    continue; // Pula grupos para não poluir o CRM
+                }
+
+                const messageId = rawMsg.key?.id;
+                const pushName = rawMsg.pushName || remoteJid?.split('@')[0];
 
                 // Extrair texto (varia de acordo com o tipo: conversa, imagem com caption, etc)
                 // Fallback robusto para Evolution V2 que pode mudar a profundidade:
