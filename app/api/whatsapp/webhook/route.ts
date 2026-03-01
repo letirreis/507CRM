@@ -46,12 +46,24 @@ export async function POST(req: NextRequest) {
 
         // Handle incoming messages
         if (normalizedEvent === 'MESSAGES_UPSERT') {
-            const messages = data.messages || [];
+            let messages: any[] = [];
+
+            // Evolution v2 format check
+            if (Array.isArray(data)) {
+                messages = data;
+            } else if (data && data.messages && Array.isArray(data.messages)) {
+                messages = data.messages;
+            } else if (data && typeof data === 'object') {
+                // Se for um único objeto de mensagem (Evolution v2 pattern)
+                messages = [data];
+            }
+
+            console.log(`[Webhook] Prepared ${messages.length} messages for processing`);
 
             for (const rawMsg of messages) {
                 // Ignorar status de broadcast ou status_update
-                if (!rawMsg.message || rawMsg.key.remoteJid === 'status@broadcast') {
-                    console.log('[Webhook] Skipped message:', rawMsg.key.remoteJid, 'has message:', !!rawMsg.message);
+                if (!rawMsg.message || rawMsg.key?.remoteJid === 'status@broadcast') {
+                    console.log('[Webhook] Skipped message:', rawMsg.key?.remoteJid, 'has message:', !!rawMsg.message);
                     continue;
                 }
 
@@ -63,14 +75,20 @@ export async function POST(req: NextRequest) {
                 const pushName = rawMsg.pushName || remoteJid.split('@')[0];
 
                 // Extrair texto (varia de acordo com o tipo: conversa, imagem com caption, etc)
-                const textContent =
-                    rawMsg.message.conversation ||
-                    rawMsg.message.extendedTextMessage?.text ||
-                    rawMsg.message.imageMessage?.caption ||
-                    rawMsg.message.videoMessage?.caption ||
-                    '';
+                // Fallback robusto para Evolution V2 que pode mudar a profundidade:
+                let textContent = '';
+                if (typeof rawMsg.message === 'string') {
+                    textContent = rawMsg.message;
+                } else {
+                    textContent = rawMsg.message?.conversation ||
+                        rawMsg.message?.extendedTextMessage?.text ||
+                        rawMsg.message?.imageMessage?.caption ||
+                        rawMsg.message?.videoMessage?.caption ||
+                        rawMsg.text || // V2 Fallback
+                        '';
+                }
 
-                const messageType = Object.keys(rawMsg.message)[0].replace('Message', '');
+                const messageType = rawMsg.messageType || (typeof rawMsg.message === 'object' ? Object.keys(rawMsg.message || {})[0]?.replace('Message', '') : 'text');
 
                 console.log(`[Webhook] Extracted text: "${textContent}", Type: ${messageType}`);
 
@@ -123,7 +141,7 @@ export async function POST(req: NextRequest) {
                             type: messageType,
                             is_from_me: isFromMe,
                             sender_name: pushName,
-                            timestamp: new Date(rawMsg.messageTimestamp * 1000).toISOString(),
+                            timestamp: rawMsg.messageTimestamp ? new Date(rawMsg.messageTimestamp * (rawMsg.messageTimestamp > 1000000000000 ? 1 : 1000)).toISOString() : new Date().toISOString(),
                             status: isFromMe ? 'SENT' : 'DELIVERED'
                         }, {
                             onConflict: 'message_id,chat_id'
