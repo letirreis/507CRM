@@ -15,6 +15,7 @@ export function CRMActionPanel({ chat }: { chat: any }) {
     if (!chat) return null;
 
     const handleSaveContact = async () => {
+        if (!supabase) return;
         setIsLoadingContact(true);
         try {
             const { data: userData } = await supabase.auth.getUser();
@@ -50,6 +51,7 @@ export function CRMActionPanel({ chat }: { chat: any }) {
     };
 
     const handleCreateDeal = async () => {
+        if (!supabase) return;
         setIsLoadingDeal(true);
         try {
             const { data: userData } = await supabase.auth.getUser();
@@ -106,6 +108,7 @@ export function CRMActionPanel({ chat }: { chat: any }) {
     };
 
     const handleAddTag = async () => {
+        if (!supabase) return;
         const newTag = window.prompt('Digite o nome da nova tag:');
         if (!newTag || !newTag.trim()) return;
 
@@ -126,6 +129,7 @@ export function CRMActionPanel({ chat }: { chat: any }) {
     };
 
     const handleRemoveTag = async (tagToRemove: string) => {
+        if (!supabase) return;
         const currentTags = chat.tags || [];
         const updatedTags = currentTags.filter((t: string) => t !== tagToRemove);
 
