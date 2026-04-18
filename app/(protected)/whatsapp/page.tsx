@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import { WhatsAppSettings } from '@/features/whatsapp/components/WhatsAppSettings';
 
 export const metadata: Metadata = {
-    title: 'WhatsApp Settings | NossoCRM',
+    title: 'WhatsApp Settings | Gravidade 507',
     description: 'Manage your WhatsApp connections.',
 };
 

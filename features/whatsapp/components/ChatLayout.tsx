@@ -226,7 +226,7 @@ export function ChatLayout() {
                     <div className="bg-background p-6 rounded-full shadow-sm border mb-4">
                         <img src="/whatsapp-logo.svg" alt="WA" className="w-16 h-16 opacity-20 grayscale" onError={(e) => { e.currentTarget.style.display = 'none' }} />
                     </div>
-                    <p className="text-lg font-medium">NossoCRM WhatsApp</p>
+                    <p className="text-lg font-medium">Gravidade 507 WhatsApp</p>
                     <p className="text-sm">Selecione uma conversa para começar o atendimento.</p>
                 </div>
             )}

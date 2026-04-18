@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import { ChatLayout } from '@/features/whatsapp/components/ChatLayout';
 
 export const metadata: Metadata = {
-    title: 'WhatsApp Chat | NossoCRM',
+    title: 'WhatsApp Chat | Gravidade 507',
     description: 'Chat with your leads and customers.',
 };
 

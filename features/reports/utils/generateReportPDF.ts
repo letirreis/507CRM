@@ -64,13 +64,13 @@ export const generateReportPDF = (data: ReportData, period: PeriodFilter, boardN
     // HEADER
     // ============================================
 
-    // Logo placeholder (N for NossoCRM)
-    doc.setFillColor(...COLORS.blue);
+    // Logo placeholder (G507 for Gravidade 507)
+    doc.setFillColor(228, 95, 166);
     doc.roundedRect(margin, 12, 12, 12, 2, 2, 'F');
-    doc.setFontSize(10);
+    doc.setFontSize(7);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(255, 255, 255);
-    doc.text('N', margin + 4.5, 20);
+    doc.text('507', margin + 1.5, 20);
 
     // Title
     doc.setFontSize(20);
@@ -310,7 +310,7 @@ export const generateReportPDF = (data: ReportData, period: PeriodFilter, boardN
     // Footer text
     doc.setFontSize(7);
     doc.setTextColor(...COLORS.secondary);
-    doc.text('NossoCRM', margin, pageHeight - 10);
+    doc.text('Gravidade 507', margin, pageHeight - 10);
     doc.text('Página 1', pageWidth / 2, pageHeight - 10, { align: 'center' });
     doc.text(new Date().toLocaleDateString('pt-BR'), pageWidth - margin, pageHeight - 10, { align: 'right' });
 
