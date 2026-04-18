@@ -24,7 +24,7 @@
  * ```
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
@@ -44,11 +44,14 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   MessageCircle,
-  CheckSquare
+  CheckSquare,
+  Camera,
+  Loader2,
 } from 'lucide-react';
 import { useCRM } from '../context/CRMContext';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { supabase } from '@/lib/supabase';
 import { prefetchRoute, RouteName } from '@/lib/prefetch';
 import { isDebugMode, enableDebugMode, disableDebugMode } from '@/lib/debug';
 import { SkipLink } from '@/lib/a11y';
@@ -136,7 +139,7 @@ const NavItem = ({
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { darkMode, toggleDarkMode } = useTheme();
   const { isGlobalAIOpen, setIsGlobalAIOpen, sidebarCollapsed, setSidebarCollapsed } = useCRM();
-  const { user, loading, profile, signOut } = useAuth();
+  const { user, loading, profile, signOut, refreshProfile } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const { mode } = useResponsiveMode();
@@ -145,6 +148,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const isDesktop = mode === 'desktop';
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarToast, setAvatarToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const avatarFileInputRef = useRef<HTMLInputElement>(null);
   // Hydration safety: `isDebugMode()` reads localStorage. On SSR it is always false.
   // Initialize deterministically and sync on mount to avoid hydration mismatch warnings.
   const [debugEnabled, setDebugEnabled] = useState(false);
@@ -152,6 +158,63 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   useEffect(() => {
     setDebugEnabled(isDebugMode());
   }, []);
+
+  const triggerAvatarPicker = useCallback(() => {
+    avatarFileInputRef.current?.click();
+  }, []);
+
+  const handleAvatarUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !profile?.id || !supabase) return;
+
+    if (!file.type.startsWith('image/')) {
+      setAvatarToast({ type: 'error', text: 'Selecione uma imagem válida.' });
+      setTimeout(() => setAvatarToast(null), 3000);
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setAvatarToast({ type: 'error', text: 'A imagem deve ter no máximo 2MB.' });
+      setTimeout(() => setAvatarToast(null), 3000);
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const filePath = `avatars/${profile.id}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      const urlWithTimestamp = `${publicUrl}?t=${Date.now()}`;
+
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: urlWithTimestamp })
+        .eq('id', profile.id);
+
+      if (updateError) throw updateError;
+
+      if (refreshProfile) await refreshProfile();
+      setAvatarToast({ type: 'success', text: 'Foto atualizada!' });
+      setTimeout(() => setAvatarToast(null), 3000);
+    } catch (err) {
+      console.error('Avatar upload error:', err);
+      setAvatarToast({ type: 'error', text: 'Erro ao atualizar foto. Tente novamente.' });
+      setTimeout(() => setAvatarToast(null), 3000);
+    } finally {
+      setUploadingAvatar(false);
+      // Reset input so the same file can be re-selected if needed
+      event.target.value = '';
+    }
+  }, [profile?.id, refreshProfile]);
 
   // If the user signed out (or session expired), leave protected shell ASAP.
   // This prevents rendering fallbacks like "Usuário" while unauthenticated.
@@ -227,6 +290,21 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     <div className="flex h-screen overflow-hidden bg-surface-bg bg-dots">
       {/* Skip Link for keyboard users */}
       <SkipLink targetId="main-content" />
+
+      {/* Avatar upload toast notification */}
+      {avatarToast && (
+        <div
+          role="alert"
+          className={`fixed bottom-6 right-6 z-[200] flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-sm font-medium animate-in slide-in-from-bottom-2 fade-in duration-150 ${
+            avatarToast.type === 'success'
+              ? 'bg-green-50 dark:bg-green-900/80 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-500/30'
+              : 'bg-red-50 dark:bg-red-900/80 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-500/30'
+          }`}
+        >
+          <Camera className="w-4 h-4 shrink-0" />
+          {avatarToast.text}
+        </div>
+      )}
 
       {/* Tablet rail (shows full icon set; no "More" sheet needed) */}
       {isTablet ? <NavigationRail /> : null}
@@ -331,22 +409,29 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 className={`flex items-center gap-3 rounded-xl bg-slate-50/50 dark:bg-white/5 border border-slate-100 dark:border-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-all group focus-visible-ring ${sidebarCollapsed ? 'p-0 w-10 h-10 justify-center' : 'w-full p-3'
                   }`}
               >
-                {profile?.avatar_url ? (
-                  <Image
-                    src={profile.avatar_url}
-                    alt=""
-                    width={40}
-                    height={40}
-                    className="w-10 h-10 rounded-full object-cover ring-2 ring-white dark:ring-slate-800 shadow-lg"
-                    unoptimized
-                  />
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold text-sm ring-2 ring-white dark:ring-slate-800 shadow-lg shrink-0" aria-hidden="true">
-                    {profile?.first_name && profile?.last_name
-                      ? `${profile.first_name[0]}${profile.last_name[0]}`.toUpperCase()
-                      : profile?.nickname?.substring(0, 2).toUpperCase() || userInitials}
-                  </div>
-                )}
+                <div className="relative shrink-0">
+                  {profile?.avatar_url ? (
+                    <Image
+                      src={profile.avatar_url}
+                      alt=""
+                      width={40}
+                      height={40}
+                      className="w-10 h-10 rounded-full object-cover ring-2 ring-white dark:ring-slate-800 shadow-lg"
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center text-white font-bold text-sm ring-2 ring-white dark:ring-slate-800 shadow-lg" aria-hidden="true">
+                      {profile?.first_name && profile?.last_name
+                        ? `${profile.first_name[0]}${profile.last_name[0]}`.toUpperCase()
+                        : profile?.nickname?.substring(0, 2).toUpperCase() || userInitials}
+                    </div>
+                  )}
+                  {uploadingAvatar && (
+                    <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center">
+                      <Loader2 className="w-4 h-4 text-white animate-spin" />
+                    </div>
+                  )}
+                </div>
 
                 {!sidebarCollapsed && (
                   <>
@@ -371,6 +456,16 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 )}
               </button>
 
+              {/* Hidden file input for avatar upload */}
+              <input
+                ref={avatarFileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarUpload}
+                className="hidden"
+                aria-hidden="true"
+              />
+
               {/* Dropdown Menu */}
               {isUserMenuOpen && (
                 <>
@@ -383,6 +478,21 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                     className={`absolute bottom-full mb-2 z-50 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-in slide-in-from-bottom-2 fade-in duration-150 ${sidebarCollapsed ? 'left-0 w-48' : 'left-0 right-0'}`}
                   >
                     <div className="p-1">
+                      <button
+                        onClick={() => {
+                          setIsUserMenuOpen(false);
+                          triggerAvatarPicker();
+                        }}
+                        disabled={uploadingAvatar}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-lg transition-colors focus-visible-ring disabled:opacity-50"
+                      >
+                        {uploadingAvatar ? (
+                          <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
+                        ) : (
+                          <Camera className="w-4 h-4 text-slate-400" />
+                        )}
+                        Trocar foto
+                      </button>
                       <Link
                         href="/profile"
                         onClick={() => setIsUserMenuOpen(false)}
