@@ -239,14 +239,14 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           aria-label="Menu principal"
         >
           <div className={`h-16 flex items-center border-b border-[var(--color-border-subtle)] transition-all duration-300 px-5 ${sidebarCollapsed ? 'justify-center px-0' : 'justify-between'}`}>
-            <div className={`flex items-center transition-all duration-300 ${sidebarCollapsed ? 'gap-0 justify-center' : 'gap-3'}`}>
-              <div className="w-9 h-9 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-primary-500/20 shrink-0" aria-hidden="true">
-                N
-              </div>
+              <div className={`flex items-center transition-all duration-300 ${sidebarCollapsed ? 'gap-0 justify-center' : 'gap-3'}`}>
+              <div className="w-9 h-9 bg-gradient-to-br from-primary-500 to-primary-800 rounded-xl flex items-center justify-center shadow-lg shadow-primary-500/20 shrink-0 overflow-hidden" aria-hidden="true">
+                  <Image src="/icons/icon.svg" alt="Gravidade 507 logo" width={36} height={36} className="w-9 h-9" />
+                </div>
               <span className={`text-xl font-bold font-display tracking-tight text-slate-900 dark:text-white whitespace-nowrap overflow-hidden transition-all duration-300 ${sidebarCollapsed ? 'w-0 opacity-0' : 'w-auto opacity-100'}`}>
-                NossoCRM
-              </span>
-            </div>
+                  Gravidade 507
+                </span>
+              </div>
 
             {/* Header Toggle Button - Only visible when expanded */}
             {!sidebarCollapsed && (

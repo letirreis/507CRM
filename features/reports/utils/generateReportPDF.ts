@@ -22,6 +22,7 @@ interface ReportData {
 const COLORS = {
     primary: [15, 23, 42] as [number, number, number],
     secondary: [100, 116, 139] as [number, number, number],
+    brand: [228, 95, 166] as [number, number, number],
     blue: [59, 130, 246] as [number, number, number],
     emerald: [16, 185, 129] as [number, number, number],
     purple: [139, 92, 246] as [number, number, number],
@@ -64,13 +65,13 @@ export const generateReportPDF = (data: ReportData, period: PeriodFilter, boardN
     // HEADER
     // ============================================
 
-    // Logo placeholder (N for NossoCRM)
-    doc.setFillColor(...COLORS.blue);
+    // Logo placeholder (G507 for Gravidade 507)
+    doc.setFillColor(...COLORS.brand);
     doc.roundedRect(margin, 12, 12, 12, 2, 2, 'F');
-    doc.setFontSize(10);
+    doc.setFontSize(7);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(255, 255, 255);
-    doc.text('N', margin + 4.5, 20);
+    doc.text('507', margin + 1.5, 20);
 
     // Title
     doc.setFontSize(20);
@@ -310,7 +311,7 @@ export const generateReportPDF = (data: ReportData, period: PeriodFilter, boardN
     // Footer text
     doc.setFontSize(7);
     doc.setTextColor(...COLORS.secondary);
-    doc.text('NossoCRM', margin, pageHeight - 10);
+    doc.text('Gravidade 507', margin, pageHeight - 10);
     doc.text('Página 1', pageWidth / 2, pageHeight - 10, { align: 'center' });
     doc.text(new Date().toLocaleDateString('pt-BR'), pageWidth - margin, pageHeight - 10, { align: 'right' });
 
