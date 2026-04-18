@@ -22,6 +22,7 @@ interface ReportData {
 const COLORS = {
     primary: [15, 23, 42] as [number, number, number],
     secondary: [100, 116, 139] as [number, number, number],
+    brand: [228, 95, 166] as [number, number, number],
     blue: [59, 130, 246] as [number, number, number],
     emerald: [16, 185, 129] as [number, number, number],
     purple: [139, 92, 246] as [number, number, number],
@@ -65,7 +66,7 @@ export const generateReportPDF = (data: ReportData, period: PeriodFilter, boardN
     // ============================================
 
     // Logo placeholder (G507 for Gravidade 507)
-    doc.setFillColor(228, 95, 166);
+    doc.setFillColor(...COLORS.brand);
     doc.roundedRect(margin, 12, 12, 12, 2, 2, 'F');
     doc.setFontSize(7);
     doc.setFont('helvetica', 'bold');
