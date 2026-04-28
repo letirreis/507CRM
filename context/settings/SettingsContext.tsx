@@ -10,7 +10,7 @@ import React, {
 } from 'react';
 import { usePathname } from 'next/navigation';
 import { LifecycleStage, Product, CustomFieldDefinition, Lead } from '@/types';
-import { settingsService, lifecycleStagesService, productsService } from '@/lib/supabase';
+import { settingsService, lifecycleStagesService, productsService, customFieldDefinitionsService } from '@/lib/supabase';
 import { useAuth } from '../AuthContext';
 
 const DEFAULT_LIFECYCLE_STAGES: LifecycleStage[] = [
@@ -47,11 +47,11 @@ interface SettingsContextType {
   /** Recarrega o catálogo de produtos (usado para manter o dropdown do deal atualizado). */
   refreshProducts: () => Promise<void>;
 
-  // Custom Fields (TODO: migrate to Supabase)
+  // Custom Fields
   customFieldDefinitions: CustomFieldDefinition[];
-  addCustomField: (field: Omit<CustomFieldDefinition, 'id'>) => void;
-  updateCustomField: (id: string, updates: Partial<CustomFieldDefinition>) => void;
-  removeCustomField: (id: string) => void;
+  addCustomField: (field: Omit<CustomFieldDefinition, 'id'>) => Promise<CustomFieldDefinition | null>;
+  updateCustomField: (id: string, updates: Partial<CustomFieldDefinition>) => Promise<void>;
+  removeCustomField: (id: string) => Promise<void>;
 
   // Tags (TODO: migrate to Supabase)
   availableTags: string[];
@@ -253,6 +253,10 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
       if (stages && stages.length > 0) {
         setLifecycleStages(stages);
       }
+
+      // Fetch custom field definitions
+      const { data: customFields } = await customFieldDefinitionsService.getAll();
+      setCustomFieldDefinitions(customFields);
 
       // Fetch products catalog (active only)
       await refreshProducts();
@@ -495,17 +499,34 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     [updateSettings]
   );
 
-  // Custom Fields (local state for now)
-  const addCustomField = useCallback((field: Omit<CustomFieldDefinition, 'id'>) => {
-    const newField = { ...field, id: crypto.randomUUID() };
-    setCustomFieldDefinitions(prev => [...prev, newField]);
+  // Custom Fields (persisted to Supabase)
+  const addCustomField = useCallback(async (field: Omit<CustomFieldDefinition, 'id'>): Promise<CustomFieldDefinition | null> => {
+    const { data, error } = await customFieldDefinitionsService.create(field);
+    if (error) {
+      setError(error.message);
+      return null;
+    }
+    if (data) {
+      setCustomFieldDefinitions(prev => [...prev, data]);
+    }
+    return data;
   }, []);
 
-  const updateCustomField = useCallback((id: string, updates: Partial<CustomFieldDefinition>) => {
+  const updateCustomField = useCallback(async (id: string, updates: Partial<CustomFieldDefinition>): Promise<void> => {
+    const { error } = await customFieldDefinitionsService.update(id, updates);
+    if (error) {
+      setError(error.message);
+      return;
+    }
     setCustomFieldDefinitions(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
   }, []);
 
-  const removeCustomField = useCallback((id: string) => {
+  const removeCustomField = useCallback(async (id: string): Promise<void> => {
+    const { error } = await customFieldDefinitionsService.delete(id);
+    if (error) {
+      setError(error.message);
+      return;
+    }
     setCustomFieldDefinitions(prev => prev.filter(f => f.id !== id));
   }, []);
 
