@@ -4,7 +4,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import ConfirmModal from '@/components/ConfirmModal';
 import { LossReasonModal } from '@/components/ui/LossReasonModal';
-import { useMoveDealSimple } from '@/lib/query/hooks';
+import { useMoveDealSimple, useDealsView } from '@/lib/query/hooks';
 import { FocusTrap, useFocusReturn } from '@/lib/a11y';
 import { Activity } from '@/types';
 import { usePersistedState } from '@/hooks/usePersistedState';
@@ -65,7 +65,6 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
   const isMobile = mode === 'mobile';
 
   const {
-    deals,
     contacts,
     updateDeal,
     deleteDeal,
@@ -84,8 +83,11 @@ export const DealDetailModal: React.FC<DealDetailModalProps> = ({ dealId, isOpen
   const { profile } = useAuth();
   const { addToast } = useToast();
 
+  // Use the view cache (same source as Kanban) so newly created deals are found immediately.
+  const { data: dealsViewData = [] } = useDealsView();
+
   // Performance: avoid repeated `find(...)` on large arrays.
-  const dealsById = useMemo(() => new Map(deals.map((d) => [d.id, d])), [deals]);
+  const dealsById = useMemo(() => new Map(dealsViewData.map((d) => [d.id, d])), [dealsViewData]);
   const contactsById = useMemo(() => new Map(contacts.map((c) => [c.id, c])), [contacts]);
   const boardsById = useMemo(() => new Map(boards.map((b) => [b.id, b])), [boards]);
   const lifecycleStageById = useMemo(() => new Map(lifecycleStages.map((s) => [s.id, s])), [lifecycleStages]);
