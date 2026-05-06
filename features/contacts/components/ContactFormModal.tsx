@@ -4,6 +4,7 @@ import { Contact } from '@/types';
 import { DebugFillButton } from '@/components/debug/DebugFillButton';
 import { fakeContact } from '@/lib/debug';
 import { FocusTrap, useFocusReturn } from '@/lib/a11y';
+import { useSettings } from '@/context/settings/SettingsContext';
 
 interface ContactFormData {
   name: string;
@@ -11,6 +12,7 @@ interface ContactFormData {
   phone: string;
   role: string;
   companyName: string;
+  customFields: Record<string, any>;
 }
 
 interface ContactFormModalProps {
@@ -57,6 +59,7 @@ export const ContactFormModal: React.FC<ContactFormModalProps> = ({
   const headingId = useId();
   useFocusReturn({ enabled: isOpen });
   const [isCreatingBatch, setIsCreatingBatch] = useState(false);
+  const { customFieldDefinitions } = useSettings();
   
   if (!isOpen) return null;
 
@@ -68,6 +71,7 @@ export const ContactFormModal: React.FC<ContactFormModalProps> = ({
       phone: fake.phone,
       role: fake.role,
       companyName: fake.companyName,
+      customFields: {},
     });
   };
 
@@ -182,6 +186,64 @@ export const ContactFormModal: React.FC<ContactFormModalProps> = ({
                 : 'Se a empresa já existir, o contato será vinculado a ela.'}
             </p>
           </div>
+
+          {customFieldDefinitions.length > 0 && (
+            <div className="pt-2 border-t border-slate-200/70 dark:border-white/10">
+              <h3 className="text-xs font-bold text-slate-500 uppercase mb-3">
+                Campos Personalizados
+              </h3>
+              <div className="space-y-3">
+                {customFieldDefinitions.map(field => {
+                  const fieldId = `contact-custom-field-${field.id}`;
+                  const inputType =
+                    field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text';
+                  return (
+                  <div key={field.id}>
+                    <label
+                      htmlFor={fieldId}
+                      className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1"
+                    >
+                      {field.label}
+                    </label>
+                    {field.type === 'select' ? (
+                      <select
+                        id={fieldId}
+                        value={formData.customFields?.[field.key] || ''}
+                        onChange={e =>
+                          setFormData({
+                            ...formData,
+                            customFields: { ...(formData.customFields || {}), [field.key]: e.target.value },
+                          })
+                        }
+                        className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="">Selecione...</option>
+                        {field.options?.map(opt => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        id={fieldId}
+                        type={inputType}
+                        className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                        value={formData.customFields?.[field.key] || ''}
+                        onChange={e =>
+                          setFormData({
+                            ...formData,
+                            customFields: { ...(formData.customFields || {}), [field.key]: e.target.value },
+                          })
+                        }
+                      />
+                    )}
+                  </div>
+                );
+                })}
+              </div>
+            </div>
+          )}
 
             <button
             type="submit"

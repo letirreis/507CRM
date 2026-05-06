@@ -61,6 +61,8 @@ export interface DbContact {
   last_purchase_date: string | null;
   /** Valor total de compras. */
   total_value: number;
+  /** Campos personalizados (JSON). */
+  custom_fields: Record<string, any> | null;
   /** Data de criação. */
   created_at: string;
   /** Data de atualização. */
@@ -117,6 +119,7 @@ const transformContact = (db: DbContact): Contact => ({
   lastInteraction: db.last_interaction || undefined,
   lastPurchaseDate: db.last_purchase_date || undefined,
   totalValue: db.total_value || 0,
+  customFields: db.custom_fields ?? {},
   createdAt: db.created_at,
   updatedAt: db.updated_at,
 });
@@ -165,6 +168,7 @@ const transformContactToDb = (contact: Partial<Contact>): Partial<DbContact> => 
   if (contact.lastInteraction !== undefined) db.last_interaction = contact.lastInteraction || null;
   if (contact.lastPurchaseDate !== undefined) db.last_purchase_date = contact.lastPurchaseDate || null;
   if (contact.totalValue !== undefined) db.total_value = contact.totalValue;
+  if (contact.customFields !== undefined) db.custom_fields = contact.customFields;
 
   return db;
 };
@@ -377,6 +381,7 @@ export const contactsService = {
         last_interaction: sanitizeText(contact.lastInteraction),
         last_purchase_date: sanitizeText(contact.lastPurchaseDate),
         total_value: sanitizeNumber(contact.totalValue, 0),
+        custom_fields: contact.customFields ?? {},
       };
 
       const { data, error } = await supabase

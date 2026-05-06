@@ -1,5 +1,5 @@
 import { supabase } from './client';
-import { LifecycleStage } from '@/types';
+import { CustomFieldDefinition, CustomFieldEntityType, CustomFieldType, LifecycleStage } from '@/types';
 import { sanitizeUUID } from './utils';
 
 // ============================================
@@ -329,6 +329,120 @@ export const lifecycleStagesService = {
 
       await Promise.all(updates);
       return { error: null };
+    } catch (e) {
+      return { error: e as Error };
+    }
+  },
+};
+
+// ============================================
+// CUSTOM FIELD DEFINITIONS SERVICE
+// ============================================
+
+interface DbCustomFieldDefinition {
+  id: string;
+  key: string;
+  label: string;
+  type: string;
+  options: string[] | null;
+  entity_type: string;
+  organization_id: string;
+  created_at: string;
+}
+
+async function getCustomFieldOrgId(): Promise<string | null> {
+  if (!supabase) return null;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('organization_id')
+    .eq('id', user.id)
+    .single();
+  return sanitizeUUID((profile as any)?.organization_id);
+}
+
+const transformCustomFieldDefinition = (db: DbCustomFieldDefinition): CustomFieldDefinition => ({
+  id: db.id,
+  key: db.key,
+  label: db.label,
+  type: db.type as CustomFieldType,
+  options: db.options ?? undefined,
+  entityType: db.entity_type as CustomFieldEntityType,
+});
+
+export const customFieldDefinitionsService = {
+  async getAll(entityType?: CustomFieldEntityType): Promise<{ data: CustomFieldDefinition[]; error: Error | null }> {
+    try {
+      if (!supabase) return { data: [], error: null };
+      const orgId = await getCustomFieldOrgId();
+      if (!orgId) return { data: [], error: null };
+      let query = supabase
+        .from('custom_field_definitions')
+        .select('*')
+        .eq('organization_id', orgId)
+        .order('created_at', { ascending: true });
+      if (entityType) {
+        query = query.eq('entity_type', entityType);
+      }
+      const { data, error } = await query;
+      if (error) return { data: [], error };
+      return { data: (data || []).map(d => transformCustomFieldDefinition(d as DbCustomFieldDefinition)), error: null };
+    } catch (e) {
+      return { data: [], error: e as Error };
+    }
+  },
+
+  async create(field: Omit<CustomFieldDefinition, 'id'>): Promise<{ data: CustomFieldDefinition | null; error: Error | null }> {
+    try {
+      if (!supabase) return { data: null, error: new Error('Supabase não configurado') };
+      const orgId = await getCustomFieldOrgId();
+      if (!orgId) return { data: null, error: new Error('Organização não encontrada') };
+      const { data, error } = await supabase
+        .from('custom_field_definitions')
+        .insert({
+          key: field.key,
+          label: field.label,
+          type: field.type,
+          options: field.options ?? null,
+          entity_type: field.entityType ?? 'deal',
+          organization_id: orgId,
+        })
+        .select()
+        .single();
+      if (error) return { data: null, error };
+      return { data: transformCustomFieldDefinition(data as DbCustomFieldDefinition), error: null };
+    } catch (e) {
+      return { data: null, error: e as Error };
+    }
+  },
+
+  async update(id: string, updates: Partial<Omit<CustomFieldDefinition, 'id' | 'key'>>): Promise<{ error: Error | null }> {
+    try {
+      if (!supabase) return { error: new Error('Supabase não configurado') };
+      const dbUpdates: Partial<DbCustomFieldDefinition> = {};
+      if (updates.label !== undefined) dbUpdates.label = updates.label;
+      if (updates.type !== undefined) dbUpdates.type = updates.type;
+      if (updates.options !== undefined) dbUpdates.options = updates.options ?? null;
+      if (updates.entityType !== undefined) dbUpdates.entity_type = updates.entityType;
+      const { error } = await supabase
+        .from('custom_field_definitions')
+        .update(dbUpdates)
+        .eq('id', id);
+      return { error };
+    } catch (e) {
+      return { error: e as Error };
+    }
+  },
+
+  async delete(id: string): Promise<{ error: Error | null }> {
+    try {
+      if (!supabase) return { error: new Error('Supabase não configurado') };
+      const { error } = await supabase
+        .from('custom_field_definitions')
+        .delete()
+        .eq('id', id);
+      return { error };
     } catch (e) {
       return { error: e as Error };
     }
