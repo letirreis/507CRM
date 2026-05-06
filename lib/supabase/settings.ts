@@ -424,6 +424,7 @@ export const customFieldDefinitionsService = {
       if (updates.label !== undefined) dbUpdates.label = updates.label;
       if (updates.type !== undefined) dbUpdates.type = updates.type;
       if (updates.options !== undefined) dbUpdates.options = updates.options ?? null;
+      if (updates.entityType !== undefined) dbUpdates.entity_type = updates.entityType;
       const { error } = await supabase
         .from('custom_field_definitions')
         .update(dbUpdates)
