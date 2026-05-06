@@ -197,6 +197,7 @@ export interface DealItem {
 
 // CUSTOM FIELDS DEFINITION
 export type CustomFieldType = 'text' | 'number' | 'date' | 'select';
+export type CustomFieldEntityType = 'deal' | 'contact';
 
 export interface CustomFieldDefinition {
   id: string;
@@ -204,6 +205,7 @@ export interface CustomFieldDefinition {
   label: string;
   type: CustomFieldType;
   options?: string[]; // For select type
+  entityType?: CustomFieldEntityType;
 }
 
 // O Dinheiro/Oportunidade (O que vai no Kanban)

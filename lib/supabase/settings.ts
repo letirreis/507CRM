@@ -1,5 +1,5 @@
 import { supabase } from './client';
-import { CustomFieldDefinition, CustomFieldType, LifecycleStage } from '@/types';
+import { CustomFieldDefinition, CustomFieldEntityType, CustomFieldType, LifecycleStage } from '@/types';
 import { sanitizeUUID } from './utils';
 
 // ============================================
@@ -368,19 +368,24 @@ const transformCustomFieldDefinition = (db: DbCustomFieldDefinition): CustomFiel
   label: db.label,
   type: db.type as CustomFieldType,
   options: db.options ?? undefined,
+  entityType: db.entity_type as CustomFieldEntityType,
 });
 
 export const customFieldDefinitionsService = {
-  async getAll(): Promise<{ data: CustomFieldDefinition[]; error: Error | null }> {
+  async getAll(entityType?: CustomFieldEntityType): Promise<{ data: CustomFieldDefinition[]; error: Error | null }> {
     try {
       if (!supabase) return { data: [], error: null };
       const orgId = await getCustomFieldOrgId();
       if (!orgId) return { data: [], error: null };
-      const { data, error } = await supabase
+      let query = supabase
         .from('custom_field_definitions')
         .select('*')
         .eq('organization_id', orgId)
         .order('created_at', { ascending: true });
+      if (entityType) {
+        query = query.eq('entity_type', entityType);
+      }
+      const { data, error } = await query;
       if (error) return { data: [], error };
       return { data: (data || []).map(d => transformCustomFieldDefinition(d as DbCustomFieldDefinition)), error: null };
     } catch (e) {
@@ -400,7 +405,7 @@ export const customFieldDefinitionsService = {
           label: field.label,
           type: field.type,
           options: field.options ?? null,
-          entity_type: 'deal',
+          entity_type: field.entityType ?? 'deal',
           organization_id: orgId,
         })
         .select()

@@ -119,7 +119,7 @@ const transformContact = (db: DbContact): Contact => ({
   lastInteraction: db.last_interaction || undefined,
   lastPurchaseDate: db.last_purchase_date || undefined,
   totalValue: db.total_value || 0,
-  customFields: db.custom_fields || {},
+  customFields: db.custom_fields ?? {},
   createdAt: db.created_at,
   updatedAt: db.updated_at,
 });

@@ -193,13 +193,21 @@ export const ContactFormModal: React.FC<ContactFormModalProps> = ({
                 Campos Personalizados
               </h3>
               <div className="space-y-3">
-                {customFieldDefinitions.map(field => (
+                {customFieldDefinitions.map(field => {
+                  const fieldId = `contact-custom-field-${field.id}`;
+                  const inputType =
+                    field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text';
+                  return (
                   <div key={field.id}>
-                    <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">
+                    <label
+                      htmlFor={fieldId}
+                      className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1"
+                    >
                       {field.label}
                     </label>
                     {field.type === 'select' ? (
                       <select
+                        id={fieldId}
                         value={formData.customFields?.[field.key] || ''}
                         onChange={e =>
                           setFormData({
@@ -218,7 +226,8 @@ export const ContactFormModal: React.FC<ContactFormModalProps> = ({
                       </select>
                     ) : (
                       <input
-                        type={field.type}
+                        id={fieldId}
+                        type={inputType}
                         className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
                         value={formData.customFields?.[field.key] || ''}
                         onChange={e =>
@@ -230,7 +239,8 @@ export const ContactFormModal: React.FC<ContactFormModalProps> = ({
                       />
                     )}
                   </div>
-                ))}
+                );
+                })}
               </div>
             </div>
           )}
