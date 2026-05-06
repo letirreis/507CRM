@@ -166,6 +166,7 @@ export interface Contact {
   notes?: string; // Anotações gerais
   lastPurchaseDate?: string;
   totalValue?: number; // LTV
+  customFields?: Record<string, any>; // Dynamic fields storage
   createdAt: string;
   updatedAt?: string; // Última modificação do registro
 
