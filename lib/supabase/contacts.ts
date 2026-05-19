@@ -175,6 +175,23 @@ const transformContactToDb = (contact: Partial<Contact>): Partial<DbContact> => 
   return db;
 };
 
+const resolveDefaultOwnerId = async (): Promise<string | null> => {
+  if (!supabase) return null;
+
+  const { data: { user } } = await supabase.auth.getUser();
+  const userId = sanitizeUUID(user?.id);
+  if (!userId) return null;
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', userId)
+    .single();
+
+  if ((profile as { role?: string } | null)?.role === 'admin') return null;
+  return userId;
+};
+
 /**
  * Serviço de contatos do Supabase.
  * 
@@ -368,6 +385,8 @@ export const contactsService = {
         return { data: null, error: new Error('Supabase não configurado') };
       }
       const phoneE164 = normalizePhoneE164(contact.phone);
+      const explicitOwnerId = sanitizeUUID(contact.ownerId);
+      const ownerId = explicitOwnerId ?? await resolveDefaultOwnerId();
       const insertData = {
         name: contact.name,
         email: sanitizeText(contact.email),
@@ -384,7 +403,7 @@ export const contactsService = {
         last_purchase_date: sanitizeText(contact.lastPurchaseDate),
         total_value: sanitizeNumber(contact.totalValue, 0),
         custom_fields: contact.customFields ?? {},
-        owner_id: sanitizeUUID(contact.ownerId),
+        owner_id: ownerId,
       };
 
       const { data, error } = await supabase

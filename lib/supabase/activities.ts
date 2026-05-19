@@ -111,6 +111,21 @@ const transformActivityToDb = (activity: Partial<Activity>): Partial<DbActivity>
   return db;
 };
 
+const resolveDefaultOwnerId = async (sb: typeof supabase): Promise<string | null> => {
+  const { data: { user } } = await sb.auth.getUser();
+  const userId = sanitizeUUID(user?.id);
+  if (!userId) return null;
+
+  const { data: profile } = await sb
+    .from('profiles')
+    .select('role')
+    .eq('id', userId)
+    .single();
+
+  if ((profile as { role?: string } | null)?.role === 'admin') return null;
+  return userId;
+};
+
 export const activitiesService = {
   /**
    * Busca todas as atividades.
@@ -172,8 +187,8 @@ export const activitiesService = {
       if (explicitOwnerId) {
         insertData.owner_id = explicitOwnerId;
       } else {
-        const { data: { user } } = await sb.auth.getUser();
-        if (user?.id) insertData.owner_id = sanitizeUUID(user.id);
+        const defaultOwnerId = await resolveDefaultOwnerId(sb);
+        if (defaultOwnerId) insertData.owner_id = defaultOwnerId;
       }
 
       const { data, error } = await sb.from('activities').insert(insertData).select().single();

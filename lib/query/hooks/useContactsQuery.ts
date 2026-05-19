@@ -234,6 +234,7 @@ export const useCompanies = () => {
  * Hook to create a new contact
  */
 export const useCreateContact = () => {
+  const { user, profile } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -249,6 +250,7 @@ export const useCreateContact = () => {
 
       const tempContact: Contact = {
         ...newContact,
+        ownerId: newContact.ownerId ?? (profile?.role === 'admin' ? undefined : user?.id),
         id: `temp-${Date.now()}`,
         createdAt: new Date().toISOString(),
       } as Contact;

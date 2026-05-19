@@ -546,13 +546,14 @@ export const useContactsController = () => {
         status: 'ACTIVE',
         stage: ContactStage.LEAD,
         totalValue: 0,
+        ownerId: profile?.role === 'admin' ? undefined : user?.id,
       });
 
       createdCount++;
     }
 
     (addToast || showToast)(`${createdCount} contatos fake criados!`, 'success');
-  }, [addToast, showToast, companies, createCompanyMutation, createContactMutation]);
+  }, [addToast, showToast, companies, createCompanyMutation, createContactMutation, profile?.role, user?.id]);
 
   // Open modal to select board for deal creation (or create directly if only 1 board)
   const convertContactToDeal = (contactId: string) => {

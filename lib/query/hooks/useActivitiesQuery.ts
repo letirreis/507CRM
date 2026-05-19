@@ -143,7 +143,7 @@ interface CreateActivityParams {
  * Requires organizationId (tenant) for RLS compliance
  */
 export const useCreateActivity = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -155,7 +155,7 @@ export const useCreateActivity = () => {
     onMutate: async ({ activity: newActivity }) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.activities.all });
       const previousActivities = queryClient.getQueryData<Activity[]>(queryKeys.activities.lists());
-      const ownerId = newActivity.ownerId ?? user?.id;
+      const ownerId = newActivity.ownerId ?? (profile?.role === 'admin' ? undefined : user?.id);
 
       const tempActivity: Activity = {
         ...newActivity,
