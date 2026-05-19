@@ -148,6 +148,7 @@ export const useMoveDeal = () => {
         date: new Date().toISOString(),
         completed: true,
         user: { name: 'Sistema', avatar: '' },
+        ownerId: deal.ownerId,
       } as Omit<Activity, 'id' | 'createdAt'>).catch(console.error);
 
       // 3. LinkedStage: Update contact stage when moving to linked column
@@ -169,6 +170,7 @@ export const useMoveDeal = () => {
           date: new Date().toISOString(),
           completed: true,
           user: { name: 'Sistema', avatar: '' },
+          ownerId: deal.ownerId,
         } as Omit<Activity, 'id' | 'createdAt'>).catch(console.error);
       }
 
@@ -221,6 +223,7 @@ export const useMoveDeal = () => {
                   date: new Date().toISOString(),
                   completed: true,
                   user: { name: 'Sistema', avatar: '' },
+                  ownerId: deal.ownerId,
                 } as Omit<Activity, 'id' | 'createdAt'>);
               }
             }

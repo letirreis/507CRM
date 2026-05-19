@@ -23,19 +23,25 @@ export interface ActivitiesFilters {
   dateTo?: string;
 }
 
+const resolveOwnerScope = (profile: ReturnType<typeof useAuth>['profile'], user: ReturnType<typeof useAuth>['user']) => {
+  if (profile?.role === 'admin') return undefined;
+  return user?.id;
+};
+
 /**
  * Hook to fetch all activities with optional filters
  * Waits for auth to be ready before fetching to ensure RLS works correctly
  */
 export const useActivities = (filters?: ActivitiesFilters) => {
-  const { user, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
 
   return useQuery({
     queryKey: filters
       ? queryKeys.activities.list(filters as Record<string, unknown>)
       : queryKeys.activities.lists(),
     queryFn: async () => {
-      const { data, error } = await activitiesService.getAll();
+      const ownerId = resolveOwnerScope(profile, user);
+      const { data, error } = await activitiesService.getAll({ ownerId });
       if (error) throw error;
 
       let activities = data || [];
@@ -73,11 +79,12 @@ export const useActivities = (filters?: ActivitiesFilters) => {
  * Hook to fetch activities for a specific deal
  */
 export const useActivitiesByDeal = (dealId: string | undefined) => {
-  const { user, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   return useQuery({
     queryKey: queryKeys.activities.byDeal(dealId || ''),
     queryFn: async () => {
-      const { data, error } = await activitiesService.getAll();
+      const ownerId = resolveOwnerScope(profile, user);
+      const { data, error } = await activitiesService.getAll({ ownerId });
       if (error) throw error;
       const filtered = (data || []).filter(a => a.dealId === dealId);
       return sortActivitiesSmart(filtered);
@@ -90,11 +97,12 @@ export const useActivitiesByDeal = (dealId: string | undefined) => {
  * Hook to fetch pending activities (not completed)
  */
 export const usePendingActivities = () => {
-  const { user, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   return useQuery({
     queryKey: queryKeys.activities.list({ completed: false }),
     queryFn: async () => {
-      const { data, error } = await activitiesService.getAll();
+      const ownerId = resolveOwnerScope(profile, user);
+      const { data, error } = await activitiesService.getAll({ ownerId });
       if (error) throw error;
       const filtered = (data || []).filter(a => !a.completed);
       return sortActivitiesSmart(filtered);
@@ -107,13 +115,14 @@ export const usePendingActivities = () => {
  * Hook to fetch today's activities
  */
 export const useTodayActivities = () => {
-  const { user, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const today = new Date().toISOString().split('T')[0];
 
   return useQuery({
     queryKey: queryKeys.activities.list({ date: today }),
     queryFn: async () => {
-      const { data, error } = await activitiesService.getAll();
+      const ownerId = resolveOwnerScope(profile, user);
+      const { data, error } = await activitiesService.getAll({ ownerId });
       if (error) throw error;
       const filtered = (data || []).filter(a => a.date.startsWith(today));
       return sortActivitiesSmart(filtered);
@@ -134,6 +143,7 @@ interface CreateActivityParams {
  * Requires organizationId (tenant) for RLS compliance
  */
 export const useCreateActivity = () => {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -145,9 +155,11 @@ export const useCreateActivity = () => {
     onMutate: async ({ activity: newActivity }) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.activities.all });
       const previousActivities = queryClient.getQueryData<Activity[]>(queryKeys.activities.lists());
+      const ownerId = newActivity.ownerId ?? user?.id;
 
       const tempActivity: Activity = {
         ...newActivity,
+        ownerId,
         id: `temp-${Date.now()}`,
       } as Activity;
 

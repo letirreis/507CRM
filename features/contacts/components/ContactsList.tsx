@@ -1,6 +1,6 @@
 import React from 'react';
 import { Building2, Mail, Phone, Plus, Calendar, Pencil, Trash2, Globe, MoreHorizontal, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
-import { Contact, Company, ContactSortableColumn } from '@/types';
+import { Contact, Company, ContactSortableColumn, UserProfileSummary } from '@/types';
 import { StageBadge } from './ContactsStageTabs';
 
 // Performance: reuse Intl formatters (they are relatively expensive to instantiate).
@@ -12,6 +12,11 @@ const PT_BR_DATE_TIME_FORMATTER = new Intl.DateTimeFormat('pt-BR', {
     hour: '2-digit',
     minute: '2-digit',
 });
+
+const formatOwnerLabel = (user: UserProfileSummary) => {
+    const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+    return user.nickname || fullName || user.email || 'Sem nome';
+};
 
 /**
  * Formata uma data para exibição relativa (ex: "Hoje", "Ontem", "Há 3 dias", "15/11/2024")
@@ -83,6 +88,9 @@ interface ContactsListProps {
     convertContactToDeal: (id: string) => void;
     openEditModal: (contact: Contact) => void;
     setDeleteId: (id: string) => void;
+    salesUsers: UserProfileSummary[];
+    salesUsersLoading?: boolean;
+    canAssignOwner?: boolean;
     openEditCompanyModal?: (company: Company) => void;
     setDeleteCompanyId?: (id: string) => void;
     // Sorting props
@@ -142,6 +150,9 @@ export const ContactsList: React.FC<ContactsListProps> = ({
     convertContactToDeal,
     openEditModal,
     setDeleteId,
+    salesUsers,
+    salesUsersLoading = false,
+    canAssignOwner = false,
     openEditCompanyModal,
     setDeleteCompanyId,
     sortBy = 'created_at',
@@ -167,6 +178,16 @@ export const ContactsList: React.FC<ContactsListProps> = ({
         }
         return map;
     }, [contacts]);
+
+    const ownerLabelById = React.useMemo(() => {
+        const map = new Map<string, string>();
+        for (const user of salesUsers) {
+            map.set(user.id, formatOwnerLabel(user));
+        }
+        return map;
+    }, [salesUsers]);
+
+    const showOwnerColumn = canAssignOwner;
 
     // Performance: avoid creating `new Date()` for each row in formatRelativeDate.
     const now = new Date();
@@ -194,6 +215,9 @@ export const ContactsList: React.FC<ContactsListProps> = ({
                                     <th scope="col" className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200 font-display text-xs uppercase tracking-wider">Nome</th>
                                 )}
                                 <th scope="col" className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200 font-display text-xs uppercase tracking-wider">Estágio</th>
+                                {showOwnerColumn && (
+                                    <th scope="col" className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200 font-display text-xs uppercase tracking-wider">Vendedor</th>
+                                )}
                                 <th scope="col" className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200 font-display text-xs uppercase tracking-wider">Cargo / Empresa</th>
                                 <th scope="col" className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200 font-display text-xs uppercase tracking-wider">Contato</th>
                                 <th scope="col" className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200 font-display text-xs uppercase tracking-wider">Status</th>
@@ -241,6 +265,26 @@ export const ContactsList: React.FC<ContactsListProps> = ({
                                     <td className="px-6 py-4">
                                         <StageBadge stage={contact.stage} />
                                     </td>
+                                    {showOwnerColumn && (
+                                        <td className="px-6 py-4">
+                                            <select
+                                                value={contact.ownerId ?? ''}
+                                                onChange={(e) => updateContact(contact.id, { ownerId: e.target.value || null })}
+                                                aria-label={`Selecionar vendedor para ${contact.name}`}
+                                                className="w-full max-w-[180px] px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-xs font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                                disabled={salesUsersLoading}
+                                            >
+                                                <option value="">
+                                                    {salesUsersLoading ? 'Carregando vendedores...' : 'Sem responsável'}
+                                                </option>
+                                                {salesUsers.map((user) => (
+                                                    <option key={user.id} value={user.id}>
+                                                        {ownerLabelById.get(user.id) || formatOwnerLabel(user)}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </td>
+                                    )}
                                     <td className="px-6 py-4">
                                         <div>
                                             <span className="text-slate-900 dark:text-white font-medium block">{contact.role || 'Cargo não inf.'}</span>

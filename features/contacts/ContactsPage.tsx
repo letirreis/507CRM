@@ -103,25 +103,28 @@ export const ContactsPage: React.FC = () => {
                 </div>
             )}
 
-            <ContactsList
-                viewMode={controller.viewMode}
-                filteredContacts={controller.filteredContacts}
-                filteredCompanies={controller.filteredCompanies}
-                contacts={controller.contacts}
-                selectedIds={controller.selectedIds}
-                toggleSelect={controller.toggleSelect}
-                toggleSelectAll={controller.toggleSelectAll}
-                getCompanyName={controller.getCompanyName}
-                updateContact={controller.updateContact}
-                convertContactToDeal={controller.convertContactToDeal}
-                openEditModal={controller.openEditModal}
-                setDeleteId={controller.setDeleteId}
-                openEditCompanyModal={controller.openEditCompanyModal}
-                setDeleteCompanyId={controller.setDeleteCompanyId}
-                sortBy={controller.sortBy}
-                sortOrder={controller.sortOrder}
-                onSort={controller.handleSort}
-            />
+                <ContactsList
+                    viewMode={controller.viewMode}
+                    filteredContacts={controller.filteredContacts}
+                    filteredCompanies={controller.filteredCompanies}
+                    contacts={controller.contacts}
+                    selectedIds={controller.selectedIds}
+                    toggleSelect={controller.toggleSelect}
+                    toggleSelectAll={controller.toggleSelectAll}
+                    getCompanyName={controller.getCompanyName}
+                    updateContact={controller.updateContact}
+                    convertContactToDeal={controller.convertContactToDeal}
+                    openEditModal={controller.openEditModal}
+                    setDeleteId={controller.setDeleteId}
+                    salesUsers={controller.salesUsers}
+                    salesUsersLoading={controller.salesUsersLoading}
+                    canAssignOwner={controller.canAssignOwner}
+                    openEditCompanyModal={controller.openEditCompanyModal}
+                    setDeleteCompanyId={controller.setDeleteCompanyId}
+                    sortBy={controller.sortBy}
+                    sortOrder={controller.sortOrder}
+                    onSort={controller.handleSort}
+                />
 
             {/* T021: Pagination Controls */}
             {controller.viewMode === 'people' && controller.totalCount > 0 && (

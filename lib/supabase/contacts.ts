@@ -104,6 +104,7 @@ export interface DbCRMCompany {
 const transformContact = (db: DbContact): Contact => ({
   id: db.id,
   organizationId: db.organization_id,
+  ownerId: db.owner_id || undefined,
   name: db.name,
   email: db.email || '',
   phone: normalizePhoneE164(db.phone),
@@ -169,6 +170,7 @@ const transformContactToDb = (contact: Partial<Contact>): Partial<DbContact> => 
   if (contact.lastPurchaseDate !== undefined) db.last_purchase_date = contact.lastPurchaseDate || null;
   if (contact.totalValue !== undefined) db.total_value = contact.totalValue;
   if (contact.customFields !== undefined) db.custom_fields = contact.customFields;
+  if (contact.ownerId !== undefined) db.owner_id = sanitizeUUID(contact.ownerId);
 
   return db;
 };
@@ -382,6 +384,7 @@ export const contactsService = {
         last_purchase_date: sanitizeText(contact.lastPurchaseDate),
         total_value: sanitizeNumber(contact.totalValue, 0),
         custom_fields: contact.customFields ?? {},
+        owner_id: sanitizeUUID(contact.ownerId),
       };
 
       const { data, error } = await supabase

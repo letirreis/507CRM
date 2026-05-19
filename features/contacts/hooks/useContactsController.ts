@@ -1,7 +1,9 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useToast } from '@/context/ToastContext';
-import { Contact, Company, ContactStage, PaginationState, ContactsServerFilters, DEFAULT_PAGE_SIZE, ContactSortableColumn } from '@/types';
+import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
+import { Contact, Company, ContactStage, PaginationState, ContactsServerFilters, DEFAULT_PAGE_SIZE, ContactSortableColumn, UserProfileSummary } from '@/types';
 import {
   useContacts,
   useContactsPaginated,
@@ -28,6 +30,7 @@ import { generateFakeContacts } from '@/lib/debug';
  * @returns {{ search: string; setSearch: Dispatch<SetStateAction<string>>; statusFilter: "ALL" | "ACTIVE" | "INACTIVE" | "CHURNED" | "RISK"; setStatusFilter: Dispatch<SetStateAction<"ALL" | ... 3 more ... | "RISK">>; ... 51 more ...; addToast: (message: string, type?: ToastType | undefined) => void; }} Retorna um valor do tipo `{ search: string; setSearch: Dispatch<SetStateAction<string>>; statusFilter: "ALL" | "ACTIVE" | "INACTIVE" | "CHURNED" | "RISK"; setStatusFilter: Dispatch<SetStateAction<"ALL" | ... 3 more ... | "RISK">>; ... 51 more ...; addToast: (message: string, type?: ToastType | undefined) => void; }`.
  */
 export const useContactsController = () => {
+  const { profile, organizationId, user } = useAuth();
   // T017: Pagination state
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
@@ -164,12 +167,59 @@ export const useContactsController = () => {
     customFields: {} as Record<string, any>,
   });
   const [isSubmittingContact, setIsSubmittingContact] = useState(false);
+  const [salesUsers, setSalesUsers] = useState<UserProfileSummary[]>([]);
+  const [salesUsersLoading, setSalesUsersLoading] = useState(false);
 
   // Create Deal State
   const [createDealContactId, setCreateDealContactId] = useState<string | null>(null);
   const contactForDeal = contacts.find(c => c.id === createDealContactId);
 
   const isLoading = contactsLoading || companiesLoading;
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadSalesUsers = async () => {
+      if (!supabase || !organizationId || profile?.role !== 'admin') {
+        if (isActive) setSalesUsers([]);
+        return;
+      }
+
+      setSalesUsersLoading(true);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, email, role, first_name, last_name, nickname, created_at')
+        .eq('organization_id', organizationId)
+        .eq('role', 'vendedor')
+        .order('created_at', { ascending: true });
+
+      if (!isActive) return;
+
+      if (error) {
+        console.error('Erro ao carregar vendedores:', error.message);
+        setSalesUsers([]);
+      } else {
+        setSalesUsers(
+          (data || []).map((item: any) => ({
+            id: item.id,
+            email: item.email,
+            role: item.role,
+            firstName: item.first_name,
+            lastName: item.last_name,
+            nickname: item.nickname,
+          }))
+        );
+      }
+
+      setSalesUsersLoading(false);
+    };
+
+    void loadSalesUsers();
+
+    return () => {
+      isActive = false;
+    };
+  }, [organizationId, profile?.role]);
 
   const openCreateModal = () => {
     if (viewMode === 'companies') {
@@ -445,6 +495,7 @@ export const useContactsController = () => {
           stage: ContactStage.LEAD,
           totalValue: 0,
           customFields: formData.customFields,
+          ownerId: profile?.role === 'admin' ? undefined : user?.id,
         },
         {
           onSuccess: () => {
@@ -594,6 +645,7 @@ export const useContactsController = () => {
         status: data.status,
         stage: data.stage,
         customFields: data.customFields,
+        ownerId: data.ownerId,
       },
     });
   };
@@ -721,6 +773,9 @@ export const useContactsController = () => {
     createFakeContactsBatch,
     getCompanyName,
     updateContact,
+    salesUsers,
+    salesUsersLoading,
+    canAssignOwner: profile?.role === 'admin',
     convertContactToDeal,
     createDealForContact,
     confirmBulkDelete,
