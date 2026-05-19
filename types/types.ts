@@ -120,6 +120,16 @@ export interface Organization {
   updatedAt?: string;
 }
 
+// Perfil resumido de usuário (para atribuições/lookup)
+export interface UserProfileSummary {
+  id: string;
+  email: string;
+  role?: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  nickname?: string | null;
+}
+
 /**
  * @deprecated Use Organization instead
  * Kept for backwards compatibility during migration
@@ -152,6 +162,7 @@ export interface CRMCompany {
 export interface Contact {
   id: string;
   organizationId?: OrganizationId; // Tenant FK (for RLS) - optional during migration
+  ownerId?: string | null; // ID do usuário responsável (vendedor)
   clientCompanyId?: ClientCompanyId; // CRM company this contact belongs to
   name: string;
   role?: string;
@@ -261,6 +272,7 @@ export interface DealView extends Deal {
 export interface Activity {
   id: string;
   organizationId?: OrganizationId; // Tenant FK (for RLS) - optional during migration
+  ownerId?: string | null; // ID do usuário responsável (vendedor)
   dealId: string;
   /** ID do contato associado (opcional). Útil para tarefas sem deal. */
   contactId?: string;

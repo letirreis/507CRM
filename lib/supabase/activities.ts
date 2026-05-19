@@ -74,6 +74,7 @@ interface DbActivityWithDeal extends DbActivity {
 const transformActivity = (db: DbActivityWithDeal): Activity => ({
   id: db.id,
   organizationId: db.organization_id,
+  ownerId: db.owner_id || undefined,
   title: db.title,
   description: db.description || undefined,
   type: db.type as Activity['type'],
@@ -105,6 +106,7 @@ const transformActivityToDb = (activity: Partial<Activity>): Partial<DbActivity>
   if (activity.contactId !== undefined) db.contact_id = sanitizeUUID(activity.contactId);
   if (activity.clientCompanyId !== undefined) (db as any).client_company_id = sanitizeUUID(activity.clientCompanyId);
   if (activity.participantContactIds !== undefined) (db as any).participant_contact_ids = activity.participantContactIds || [];
+  if (activity.ownerId !== undefined) db.owner_id = sanitizeUUID(activity.ownerId);
 
   return db;
 };
@@ -115,18 +117,24 @@ export const activitiesService = {
    * 
    * @returns Promise com array de atividades ou erro.
    */
-  async getAll(): Promise<{ data: Activity[] | null; error: Error | null }> {
+  async getAll(filters?: { ownerId?: string | null }): Promise<{ data: Activity[] | null; error: Error | null }> {
     try {
       const sb = supabase;
       if (!sb) return { data: null, error: new Error('Supabase não configurado') };
 
-      const { data, error } = await sb
+      let query = sb
         .from('activities')
         .select(`
           *,
           deals:deal_id (title)
         `)
         .order('date', { ascending: false }); // Ordenação básica do banco
+
+      if (filters?.ownerId) {
+        query = query.eq('owner_id', filters.ownerId);
+      }
+
+      const { data, error } = await query;
 
       if (error) return { data: null, error };
       
@@ -160,6 +168,13 @@ export const activitiesService = {
         client_company_id: sanitizeUUID(activity.clientCompanyId),
         participant_contact_ids: activity.participantContactIds || [],
       };
+      const explicitOwnerId = sanitizeUUID(activity.ownerId);
+      if (explicitOwnerId) {
+        insertData.owner_id = explicitOwnerId;
+      } else {
+        const { data: { user } } = await sb.auth.getUser();
+        if (user?.id) insertData.owner_id = sanitizeUUID(user.id);
+      }
 
       const { data, error } = await sb.from('activities').insert(insertData).select().single();
 
