@@ -15,6 +15,7 @@ interface CompanyFormModalProps {
   onClose: () => void;
   onSubmit: (data: CompanyFormData) => void;
   editingCompany: Company | null;
+  initialName?: string;
 }
 
 /**
@@ -38,11 +39,12 @@ export const CompanyFormModal: React.FC<CompanyFormModalProps> = ({
   onClose,
   onSubmit,
   editingCompany,
+  initialName = '',
 }) => {
   const form = useForm<CompanyFormInput>({
     resolver: zodResolver(companyFormSchema),
     defaultValues: {
-      name: editingCompany?.name || '',
+      name: editingCompany?.name || initialName,
       industry: editingCompany?.industry || '',
       website: editingCompany?.website || '',
     },
@@ -58,12 +60,12 @@ export const CompanyFormModal: React.FC<CompanyFormModalProps> = ({
   React.useEffect(() => {
     if (isOpen) {
       reset({
-        name: editingCompany?.name || '',
+        name: editingCompany?.name || initialName,
         industry: editingCompany?.industry || '',
         website: editingCompany?.website || '',
       });
     }
-  }, [isOpen, editingCompany, reset]);
+  }, [isOpen, editingCompany, initialName, reset]);
 
   const handleFormSubmit = (data: CompanyFormInput) => {
     const parsed = companyFormSchema.parse(data);
@@ -109,4 +111,3 @@ export const CompanyFormModal: React.FC<CompanyFormModalProps> = ({
     </Modal>
   );
 };
-
