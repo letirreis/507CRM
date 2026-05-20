@@ -1,6 +1,6 @@
-import React, { useId, useState } from 'react';
-import { X } from 'lucide-react';
-import { Contact } from '@/types';
+import React, { useId, useMemo, useRef, useState } from 'react';
+import { Building2, Plus, X } from 'lucide-react';
+import { Company, Contact } from '@/types';
 import { DebugFillButton } from '@/components/debug/DebugFillButton';
 import { fakeContact } from '@/lib/debug';
 import { FocusTrap, useFocusReturn } from '@/lib/a11y';
@@ -21,6 +21,8 @@ interface ContactFormModalProps {
   onSubmit: (e: React.FormEvent) => void;
   formData: ContactFormData;
   setFormData: (data: ContactFormData) => void;
+  companies: Company[];
+  onRequestCreateCompany: (companyName: string) => void;
   editingContact: Contact | null;
   createFakeContactsBatch?: (count: number) => Promise<void>;
   isSubmitting?: boolean;
@@ -52,6 +54,8 @@ export const ContactFormModal: React.FC<ContactFormModalProps> = ({
   onSubmit,
   formData,
   setFormData,
+  companies,
+  onRequestCreateCompany,
   editingContact,
   createFakeContactsBatch,
   isSubmitting = false,
@@ -59,8 +63,39 @@ export const ContactFormModal: React.FC<ContactFormModalProps> = ({
   const headingId = useId();
   useFocusReturn({ enabled: isOpen });
   const [isCreatingBatch, setIsCreatingBatch] = useState(false);
+  const [isCompanyDropdownOpen, setIsCompanyDropdownOpen] = useState(false);
+  const [highlightedCompanyIndex, setHighlightedCompanyIndex] = useState(0);
+  const companyFieldRef = useRef<HTMLDivElement>(null);
   const { customFieldDefinitions } = useSettings();
-  
+
+  const companyQuery = formData.companyName.trim().toLowerCase();
+  const filteredCompanies = useMemo(() => {
+    if (!companyQuery) return [];
+    return companies
+      .filter(company => (company.name || '').toLowerCase().includes(companyQuery))
+      .slice(0, 8);
+  }, [companies, companyQuery]);
+
+  const hasExactCompanyMatch = useMemo(
+    () => filteredCompanies.some(company => (company.name || '').toLowerCase() === companyQuery),
+    [filteredCompanies, companyQuery]
+  );
+  const canCreateCompany = companyQuery.length > 0 && !hasExactCompanyMatch;
+
+  React.useEffect(() => {
+    const onPointerDown = (event: MouseEvent) => {
+      if (!companyFieldRef.current?.contains(event.target as Node)) {
+        setIsCompanyDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, []);
+
+  React.useEffect(() => {
+    setHighlightedCompanyIndex(0);
+  }, [companyQuery, filteredCompanies.length, canCreateCompany]);
+
   if (!isOpen) return null;
 
   const fillWithFakeData = () => {
@@ -73,6 +108,54 @@ export const ContactFormModal: React.FC<ContactFormModalProps> = ({
       companyName: fake.companyName,
       customFields: {},
     });
+  };
+
+  const handleSelectCompany = (companyName: string) => {
+    setFormData({ ...formData, companyName });
+    setIsCompanyDropdownOpen(false);
+  };
+
+  const handleCreateCompany = () => {
+    const nextName = formData.companyName.trim();
+    if (!nextName) return;
+    setIsCompanyDropdownOpen(false);
+    onRequestCreateCompany(nextName);
+  };
+
+  const handleCompanyKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isCompanyDropdownOpen) {
+      if (event.key === 'ArrowDown' && (filteredCompanies.length > 0 || canCreateCompany)) {
+        event.preventDefault();
+        setIsCompanyDropdownOpen(true);
+      }
+      return;
+    }
+
+    const totalItems = filteredCompanies.length + (canCreateCompany ? 1 : 0);
+    if (totalItems === 0) return;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setHighlightedCompanyIndex(prev => (prev + 1) % totalItems);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setHighlightedCompanyIndex(prev => (prev - 1 + totalItems) % totalItems);
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (highlightedCompanyIndex < filteredCompanies.length) {
+        handleSelectCompany(filteredCompanies[highlightedCompanyIndex].name);
+      } else if (canCreateCompany) {
+        handleCreateCompany();
+      }
+      return;
+    }
+    if (event.key === 'Escape') {
+      setIsCompanyDropdownOpen(false);
+    }
   };
 
   return (
@@ -169,7 +252,7 @@ export const ContactFormModal: React.FC<ContactFormModalProps> = ({
               />
             </div>
           </div>
-          <div>
+          <div ref={companyFieldRef} className="relative">
             <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
               Empresa
             </label>
@@ -178,12 +261,53 @@ export const ContactFormModal: React.FC<ContactFormModalProps> = ({
               className="w-full bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
               placeholder="Nome da Empresa"
               value={formData.companyName}
-              onChange={e => setFormData({ ...formData, companyName: e.target.value })}
+              onChange={e => {
+                setFormData({ ...formData, companyName: e.target.value });
+                setIsCompanyDropdownOpen(true);
+              }}
+              onFocus={() => {
+                if (formData.companyName.trim()) setIsCompanyDropdownOpen(true);
+              }}
+              onKeyDown={handleCompanyKeyDown}
+              autoComplete="off"
             />
+            {isCompanyDropdownOpen && (filteredCompanies.length > 0 || canCreateCompany) && (
+              <div className="absolute left-0 right-0 top-full mt-1 z-50 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xl">
+                {filteredCompanies.map((company, index) => (
+                  <button
+                    key={company.id}
+                    type="button"
+                    onClick={() => handleSelectCompany(company.name)}
+                    className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 ${
+                      highlightedCompanyIndex === index
+                        ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-200'
+                        : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50'
+                    }`}
+                  >
+                    <Building2 size={14} />
+                    <span className="truncate">{company.name}</span>
+                  </button>
+                ))}
+                {canCreateCompany && (
+                  <button
+                    type="button"
+                    onClick={handleCreateCompany}
+                    className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 border-t border-slate-100 dark:border-slate-700 ${
+                      highlightedCompanyIndex === filteredCompanies.length
+                        ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-200'
+                        : 'text-primary-600 dark:text-primary-300 hover:bg-slate-50 dark:hover:bg-slate-700/50'
+                    }`}
+                  >
+                    <Plus size={14} />
+                    <span>Criar empresa &quot;{formData.companyName.trim()}&quot;</span>
+                  </button>
+                )}
+              </div>
+            )}
             <p className="text-[10px] text-slate-400 mt-1">
               {editingContact
                 ? 'Edite para alterar a empresa. Deixe em branco para desvincular.'
-                : 'Se a empresa já existir, o contato será vinculado a ela.'}
+                : 'Digite para buscar empresa existente ou criar uma nova sem sair do fluxo.'}
             </p>
           </div>
 

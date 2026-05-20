@@ -143,6 +143,8 @@ export const ContactsPage: React.FC = () => {
                 onSubmit={controller.handleSubmit}
                 formData={controller.formData}
                 setFormData={controller.setFormData}
+                companies={controller.companies}
+                onRequestCreateCompany={controller.openCreateCompanyFromContact}
                 editingContact={controller.editingContact}
                 createFakeContactsBatch={controller.createFakeContactsBatch}
                 isSubmitting={controller.isSubmittingContact}
@@ -153,6 +155,7 @@ export const ContactsPage: React.FC = () => {
                 onClose={() => controller.setIsCompanyModalOpen(false)}
                 onSubmit={controller.handleCompanySubmit}
                 editingCompany={controller.editingCompany}
+                initialName={controller.pendingCompanyName}
             />
 
             <SelectBoardModal

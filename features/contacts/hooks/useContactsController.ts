@@ -155,6 +155,9 @@ export const useContactsController = () => {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const [editingCompany, setEditingCompany] = useState<Company | null>(null);
+  const [isCompanyModalFromContact, setIsCompanyModalFromContact] = useState(false);
+  const [pendingCompanyName, setPendingCompanyName] = useState('');
+  const [companyFromContactModal, setCompanyFromContactModal] = useState<{ id: string; name: string } | null>(null);
   const [deleteCompanyId, setDeleteCompanyId] = useState<string | null>(null);
   const [deleteWithDeals, setDeleteWithDeals] = useState<{ id: string; dealCount: number; deals: Array<{ id: string; title: string }> } | null>(null);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
@@ -229,6 +232,7 @@ export const useContactsController = () => {
     }
     setEditingContact(null);
     setFormData({ name: '', email: '', phone: '', role: '', companyName: '', customFields: {} });
+    setCompanyFromContactModal(null);
     setIsModalOpen(true);
   };
 
@@ -243,11 +247,23 @@ export const useContactsController = () => {
       companyName: company?.name || '',
       customFields: contact.customFields ?? {},
     });
+    setCompanyFromContactModal(company ? { id: company.id, name: company.name } : null);
     setIsModalOpen(true);
   };
 
   const openEditCompanyModal = (company: Company) => {
     setEditingCompany(company);
+    setIsCompanyModalFromContact(false);
+    setPendingCompanyName('');
+    setIsCompanyModalOpen(true);
+  };
+
+  const openCreateCompanyFromContact = (companyName: string) => {
+    const nextName = companyName.trim();
+    setEditingCompany(null);
+    setPendingCompanyName(nextName);
+    setIsCompanyModalFromContact(true);
+    setIsModalOpen(false);
     setIsCompanyModalOpen(true);
   };
 
@@ -260,6 +276,8 @@ export const useContactsController = () => {
             (addToast || showToast)('Empresa atualizada!', 'success');
             setIsCompanyModalOpen(false);
             setEditingCompany(null);
+            setPendingCompanyName('');
+            setIsCompanyModalFromContact(false);
           },
           onError: (error: Error) => {
             (addToast || showToast)(`Erro ao atualizar empresa: ${error.message}`, 'error');
@@ -267,19 +285,24 @@ export const useContactsController = () => {
         }
       );
     } else {
-      // Close immediately for better UX (same pattern as contact creation)
       setIsCompanyModalOpen(false);
       (addToast || showToast)('Criando empresa...', 'info');
 
       createCompanyMutation.mutate(
-        { name: data.name, industry: data.industry || '', website: data.website || '' } as any,
+        { name: data.name, industry: data.industry || '', website: data.website || '' },
         {
-          onSuccess: () => {
+          onSuccess: (createdCompany) => {
             (addToast || showToast)('Empresa criada!', 'success');
+            if (isCompanyModalFromContact) {
+              setFormData(prev => ({ ...prev, companyName: createdCompany.name }));
+              setCompanyFromContactModal({ id: createdCompany.id, name: createdCompany.name });
+              setIsModalOpen(true);
+            }
+            setPendingCompanyName('');
+            setIsCompanyModalFromContact(false);
           },
           onError: (error: Error) => {
             (addToast || showToast)(`Erro ao criar empresa: ${error.message}`, 'error');
-            // Re-open modal so user can retry
             setIsCompanyModalOpen(true);
           },
         }
@@ -423,7 +446,6 @@ export const useContactsController = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const t0 = Date.now();
     setIsSubmittingContact(true);
     const normalizedPhone = normalizePhoneE164(formData.phone);
 
@@ -434,37 +456,34 @@ export const useContactsController = () => {
       (addToast || showToast)('Criando contato...', 'info');
     }
 
-    // Find or create company
-    let companyId: string | undefined;
-    const companyName = (formData.companyName || '').trim();
-    const companyNameKey = companyName.toLowerCase();
+    try {
+      // Find or create company
+      let companyId: string | undefined;
+      const companyName = (formData.companyName || '').trim();
+      const companyNameKey = companyName.toLowerCase();
 
-    if (companyName) {
-      const existingCompany = companies.find(c => (c.name || '').toLowerCase() === companyNameKey);
-
-      if (existingCompany) {
-        companyId = existingCompany.id;
-      } else {
-        // Create new company and wait for result
-        const tCompany0 = Date.now();
-        const newCompany = await new Promise<{ id: string } | null>(resolve => {
-          createCompanyMutation.mutate(
-            { name: companyName },
-            { onSuccess: resolve, onError: () => resolve(null) }
-          );
-        });
-        if (newCompany) {
-          companyId = newCompany.id;
+      if (companyName) {
+        if (
+          companyFromContactModal &&
+          companyFromContactModal.name.toLowerCase() === companyNameKey
+        ) {
+          companyId = companyFromContactModal.id;
+        } else {
+          const existingCompany = companies.find(c => (c.name || '').toLowerCase() === companyNameKey);
+          if (existingCompany) {
+            companyId = existingCompany.id;
+          } else {
+            const createdCompany = await createCompanyMutation.mutateAsync({ name: companyName });
+            companyId = createdCompany.id;
+          }
         }
+      } else if (editingContact) {
+        // Explicitly unlink company when clearing the field in Edit
+        companyId = '';
       }
-    } else if (editingContact) {
-      // Explicitly unlink company when clearing the field in Edit
-      companyId = '';
-    }
 
-    if (editingContact) {
-      updateContactMutation.mutate(
-        {
+      if (editingContact) {
+        await updateContactMutation.mutateAsync({
           id: editingContact.id,
           updates: {
             name: formData.name,
@@ -474,18 +493,11 @@ export const useContactsController = () => {
             companyId: companyId,
             customFields: formData.customFields,
           },
-        },
-        {
-          onSuccess: () => {
-            (addToast || showToast)('Contato atualizado!', 'success');
-            setIsModalOpen(false);
-          },
-          onSettled: () => setIsSubmittingContact(false),
-        }
-      );
-    } else {
-      createContactMutation.mutate(
-        {
+        });
+        (addToast || showToast)('Contato atualizado!', 'success');
+        setIsModalOpen(false);
+      } else {
+        await createContactMutation.mutateAsync({
           name: formData.name,
           email: formData.email,
           phone: normalizedPhone,
@@ -496,19 +508,20 @@ export const useContactsController = () => {
           totalValue: 0,
           customFields: formData.customFields,
           ownerId: profile?.role === 'admin' ? undefined : user?.id,
-        },
-        {
-          onSuccess: () => {
-            (addToast || showToast)('Contato criado!', 'success');
-          },
-          onError: (error: Error) => {
-            (addToast || showToast)(`Erro ao criar contato: ${error.message}`, 'error');
-            // Re-open modal so user can adjust and retry
-            setIsModalOpen(true);
-          },
-          onSettled: () => setIsSubmittingContact(false),
-        }
+        });
+        (addToast || showToast)('Contato criado!', 'success');
+      }
+    } catch (error) {
+      const message = (error as Error).message || 'Falha inesperada';
+      (addToast || showToast)(
+        editingContact ? `Erro ao atualizar contato: ${message}` : `Erro ao criar contato: ${message}`,
+        'error'
       );
+      if (!editingContact) {
+        setIsModalOpen(true);
+      }
+    } finally {
+      setIsSubmittingContact(false);
     }
   };
 
@@ -727,6 +740,7 @@ export const useContactsController = () => {
     setDeleteWithDeals,
     bulkDeleteConfirm,
     setBulkDeleteConfirm,
+    pendingCompanyName,
     formData,
     setFormData,
     isSubmittingContact,
@@ -765,6 +779,7 @@ export const useContactsController = () => {
     // Actions
     openCreateModal,
     openEditModal,
+    openCreateCompanyFromContact,
     openEditCompanyModal,
     confirmDelete,
     confirmDeleteCompany,
