@@ -27,6 +27,7 @@ type ParsedRow = {
   lastName?: string;
   email?: string;
   phone?: string;
+  instagram?: string;
   role?: string;
   company?: string;
   status?: string;
@@ -40,6 +41,7 @@ const HEADER_SYNONYMS: Record<keyof ParsedRow, string[]> = {
   lastName: ['last name', 'lastname', 'sobrenome'],
   email: ['email', 'e-mail', 'e-mail address', 'mail'],
   phone: ['phone', 'telefone', 'celular', 'whatsapp', 'fone'],
+  instagram: ['instagram', 'insta', 'instagram username', 'instagram user', 'ig'],
   role: ['role', 'cargo', 'titulo', 'title', 'funcao', 'funçao', 'funcao/cargo'],
   company: ['company', 'empresa', 'conta', 'account', 'organization', 'organizacao', 'organização'],
   status: ['status'],
@@ -66,6 +68,7 @@ function buildHeaderIndex(headers: string[]) {
     lastName: find(HEADER_SYNONYMS.lastName),
     email: find(HEADER_SYNONYMS.email),
     phone: find(HEADER_SYNONYMS.phone),
+    instagram: find(HEADER_SYNONYMS.instagram),
     role: find(HEADER_SYNONYMS.role),
     company: find(HEADER_SYNONYMS.company),
     status: find(HEADER_SYNONYMS.status),
@@ -109,6 +112,8 @@ export async function POST(req: Request) {
     const file = form.get('file');
     const modeRaw = form.get('mode');
     const delimiterRaw = form.get('delimiter');
+    const boardId = String(form.get('boardId') ?? '').trim() || null;
+    const stageId = String(form.get('stageId') ?? '').trim() || null;
     const createCompanies = BooleanStringSchema.parse(String(form.get('createCompanies') ?? 'true'));
 
     const modeResult = ImportModeSchema.safeParse(String(modeRaw ?? 'upsert_by_email'));
@@ -119,6 +124,9 @@ export async function POST(req: Request) {
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: 'Arquivo CSV não enviado (field "file").' }, { status: 400 });
+    }
+    if ((boardId && !stageId) || (!boardId && stageId)) {
+      return NextResponse.json({ error: 'Para criar negócio na importação, informe board e coluna.' }, { status: 400 });
     }
 
     const text = await file.text();
@@ -153,8 +161,17 @@ export async function POST(req: Request) {
           ? [firstName, lastName].filter(Boolean).join(' ').trim()
           : name;
 
-      if (!computedName && !email) {
-        errors.push({ rowNumber, message: 'Linha sem nome e sem email (não consigo criar contato).' });
+      if (!computedName) {
+        errors.push({ rowNumber, message: 'Linha sem nome (campo obrigatório).' });
+        continue;
+      }
+      if (!phone) {
+        errors.push({ rowNumber, message: 'Linha sem telefone (campo obrigatório).' });
+        continue;
+      }
+      const phoneE164 = normalizePhoneE164(phone);
+      if (!phoneE164) {
+        errors.push({ rowNumber, message: 'Telefone inválido (não foi possível normalizar).' });
         continue;
       }
 
@@ -163,7 +180,8 @@ export async function POST(req: Request) {
         data: {
           name: computedName,
           email,
-          phone,
+          phone: phoneE164,
+          instagram: getCell(r, mapping.instagram),
           role: getCell(r, mapping.role),
           company: getCell(r, mapping.company),
           status: normalizeStatus(getCell(r, mapping.status)),
@@ -184,6 +202,52 @@ export async function POST(req: Request) {
     }
 
     const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Não autenticado.' }, { status: 401 });
+    }
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('organization_id')
+      .eq('id', user.id)
+      .single();
+    if (profileError) {
+      return NextResponse.json({ error: profileError.message }, { status: 400 });
+    }
+    const organizationId = profile?.organization_id ?? null;
+    if (!organizationId) {
+      return NextResponse.json({ error: 'Usuário sem organização vinculada.' }, { status: 409 });
+    }
+
+    let dealTarget: { boardId: string; stageId: string; organizationId: string } | null = null;
+    if (boardId && stageId) {
+      const { data: board, error: boardError } = await supabase
+        .from('boards')
+        .select('id,organization_id')
+        .eq('id', boardId)
+        .maybeSingle();
+      if (boardError) {
+        return NextResponse.json({ error: boardError.message }, { status: 400 });
+      }
+      if (!board) {
+        return NextResponse.json({ error: 'Board selecionado não encontrado.' }, { status: 400 });
+      }
+
+      const { data: stage, error: stageError } = await supabase
+        .from('board_stages')
+        .select('id,board_id')
+        .eq('id', stageId)
+        .eq('board_id', boardId)
+        .maybeSingle();
+      if (stageError) {
+        return NextResponse.json({ error: stageError.message }, { status: 400 });
+      }
+      if (!stage) {
+        return NextResponse.json({ error: 'Coluna selecionada não pertence ao board.' }, { status: 400 });
+      }
+
+      dealTarget = { boardId, stageId, organizationId: board.organization_id || organizationId };
+    }
 
     // Companies: preload and optionally create missing ones
     const { data: companies, error: companiesError } = await supabase
@@ -211,7 +275,7 @@ export async function POST(req: Request) {
     }
 
     if (createCompanies && missingCompanies.size) {
-      const payload = Array.from(missingCompanies).map(name => ({ name }));
+      const payload = Array.from(missingCompanies).map(name => ({ name, organization_id: organizationId }));
       const { data: createdCompanies, error: createCompaniesError } = await supabase
         .from('crm_companies')
         .insert(payload)
@@ -235,25 +299,27 @@ export async function POST(req: Request) {
     );
 
     const contactIdsByEmail = new Map<string, string[]>();
+    const existingContactCustomFieldsById = new Map<string, Record<string, unknown>>();
     if (emails.length) {
       const chunkSize = 500;
       for (let i = 0; i < emails.length; i += chunkSize) {
         const chunk = emails.slice(i, i + chunkSize);
         const { data: existing, error: existingError } = await supabase
           .from('contacts')
-          .select('id,email')
+          .select('id,email,custom_fields')
           .in('email', chunk)
           .is('deleted_at', null);
 
         if (existingError) {
           return NextResponse.json({ error: existingError.message }, { status: 400 });
         }
-        for (const c of (existing || []) as Array<{ id: string; email: string | null }>) {
+        for (const c of (existing || []) as Array<{ id: string; email: string | null; custom_fields: Record<string, unknown> | null }>) {
           const em = (c.email || '').toLowerCase().trim();
           if (!em) continue;
           const arr = contactIdsByEmail.get(em) || [];
           arr.push(c.id);
           contactIdsByEmail.set(em, arr);
+          existingContactCustomFieldsById.set(c.id, c.custom_fields || {});
         }
       }
     }
@@ -261,13 +327,24 @@ export async function POST(req: Request) {
     let created = 0;
     let updated = 0;
     let skipped = 0;
+    let dealsCreated = 0;
+    const importedContactsForDeal: Array<{ rowNumber: number; contactId: string; title: string; clientCompanyId: string | null }> = [];
 
     // Import in manageable chunks to reduce payload sizes
-    const insertBatch: Array<{ rowNumber: number; payload: Record<string, unknown> }> = [];
+    const insertBatch: Array<{
+      rowNumber: number;
+      payload: Record<string, unknown>;
+      email: string;
+      fallbackName: string;
+      clientCompanyId: string | null;
+    }> = [];
     const flushInsert = async () => {
       if (!insertBatch.length) return;
       const payloads = insertBatch.map(i => i.payload);
-      const { error: insertError } = await supabase.from('contacts').insert(payloads);
+      const { data: insertedRows, error: insertError } = await supabase
+        .from('contacts')
+        .insert(payloads)
+        .select('id,name,email,client_company_id');
       if (insertError) {
         // If batch insert fails, mark all rows as errors (keep it simple for v1)
         for (const item of insertBatch) {
@@ -275,6 +352,29 @@ export async function POST(req: Request) {
         }
       } else {
         created += insertBatch.length;
+        const inserted = (insertedRows || []) as Array<{
+          id: string;
+          name: string | null;
+          email: string | null;
+          client_company_id: string | null;
+        }>;
+        for (let i = 0; i < inserted.length; i += 1) {
+          const row = inserted[i];
+          const source = insertBatch[i];
+          if (!row || !source) continue;
+          const insertedEmail = (row.email || source.email || '').trim().toLowerCase();
+          if (insertedEmail) {
+            const ids = contactIdsByEmail.get(insertedEmail) || [];
+            ids.push(row.id);
+            contactIdsByEmail.set(insertedEmail, ids);
+          }
+          importedContactsForDeal.push({
+            rowNumber: source.rowNumber,
+            contactId: row.id,
+            title: `Deal - ${(row.name || source.fallbackName || 'Contato importado').trim()}`,
+            clientCompanyId: row.client_company_id ?? source.clientCompanyId,
+          });
+        }
       }
       insertBatch.length = 0;
     };
@@ -282,14 +382,13 @@ export async function POST(req: Request) {
     for (const p of parsed) {
       const rowNumber = p.rowNumber;
       const email = (p.data.email || '').trim().toLowerCase();
-      const phoneE164 = p.data.phone ? normalizePhoneE164(p.data.phone) : undefined;
       const companyName = (p.data.company || '').trim();
       const companyId = companyName ? companyIdByName.get(normalizeHeader(companyName)) : undefined;
 
       const base = {
         name: p.data.name || '',
         email: p.data.email || null,
-        phone: phoneE164 || null,
+        phone: p.data.phone || null,
         role: p.data.role || null,
         client_company_id: companyId || null,
         notes: p.data.notes || null,
@@ -302,7 +401,16 @@ export async function POST(req: Request) {
 
       if (mode === 'create_only') {
         // Always create, even if duplicates exist.
-        insertBatch.push({ rowNumber, payload: base });
+        insertBatch.push({
+          rowNumber,
+          payload: {
+            ...base,
+            custom_fields: p.data.instagram ? { instagram: p.data.instagram } : {},
+          },
+          email,
+          fallbackName: p.data.name || 'Contato importado',
+          clientCompanyId: companyId || null,
+        });
         if (insertBatch.length >= 200) await flushInsert();
         continue;
       }
@@ -318,25 +426,78 @@ export async function POST(req: Request) {
           continue;
         }
         const id = existingIds[0];
+        const existingCustomFields = existingContactCustomFieldsById.get(id) || {};
+        const updatePayload: Record<string, unknown> = { ...base };
+        if (p.data.instagram) {
+          updatePayload.custom_fields = {
+            ...(existingCustomFields || {}),
+            instagram: p.data.instagram,
+          };
+        }
         const { error: updateError } = await supabase
           .from('contacts')
-          .update(base)
+          .update(updatePayload)
           .eq('id', id);
 
         if (updateError) {
           errors.push({ rowNumber, message: updateError.message });
         } else {
           updated += 1;
+          importedContactsForDeal.push({
+            rowNumber,
+            contactId: id,
+            title: `Deal - ${(p.data.name || 'Contato importado').trim()}`,
+            clientCompanyId: companyId || null,
+          });
         }
         continue;
       }
 
       // No email match (or no email): create
-      insertBatch.push({ rowNumber, payload: base });
+      insertBatch.push({
+        rowNumber,
+        payload: {
+          ...base,
+          custom_fields: p.data.instagram ? { instagram: p.data.instagram } : {},
+        },
+        email,
+        fallbackName: p.data.name || 'Contato importado',
+        clientCompanyId: companyId || null,
+      });
       if (insertBatch.length >= 200) await flushInsert();
     }
 
     await flushInsert();
+
+    if (dealTarget) {
+      const dealDedup = new Set<string>();
+      for (const imported of importedContactsForDeal) {
+        const dedupKey = `${imported.contactId}:${dealTarget.boardId}:${dealTarget.stageId}`;
+        if (dealDedup.has(dedupKey)) continue;
+        dealDedup.add(dedupKey);
+        const { error: dealError } = await supabase.from('deals').insert({
+          organization_id: dealTarget.organizationId,
+          title: imported.title,
+          value: 0,
+          probability: 0,
+          priority: 'medium',
+          board_id: dealTarget.boardId,
+          stage_id: dealTarget.stageId,
+          status: dealTarget.stageId,
+          contact_id: imported.contactId,
+          client_company_id: imported.clientCompanyId,
+          tags: [],
+          custom_fields: {},
+          is_won: false,
+          is_lost: false,
+        });
+        if (dealError) {
+          errors.push({ rowNumber: imported.rowNumber, message: `Falha ao criar negócio: ${dealError.message}` });
+          continue;
+        }
+        dealsCreated += 1;
+      }
+    }
 
     // Remove internal field from potential logs; not persisted in DB anyway (supabase ignores unknown)
     // but we keep it only in memory; ok.
@@ -351,6 +512,7 @@ export async function POST(req: Request) {
         created,
         updated,
         skipped,
+        dealsCreated,
         errors: errors.length,
       },
       errors,
@@ -363,4 +525,3 @@ export async function POST(req: Request) {
     );
   }
 }
-

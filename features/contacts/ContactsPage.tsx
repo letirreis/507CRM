@@ -45,6 +45,7 @@ export const ContactsPage: React.FC = () => {
             <ContactsImportExportModal
                 isOpen={isImportExportOpen}
                 onClose={() => setIsImportExportOpen(false)}
+                boards={controller.boards}
                 exportParams={{
                     search: controller.search?.trim() ? controller.search.trim() : undefined,
                     stage: controller.stageFilter,
