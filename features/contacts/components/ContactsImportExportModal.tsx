@@ -3,6 +3,7 @@ import { Download, Upload, FileDown } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/context/ToastContext';
 import { stringifyCsv, withUtf8Bom, type CsvDelimiter } from '@/lib/utils/csv';
+import type { Board } from '@/types';
 
 type Panel = 'export' | 'import';
 
@@ -49,8 +50,9 @@ export function ContactsImportExportModal(props: {
   isOpen: boolean;
   onClose: () => void;
   exportParams: ContactsExportParams;
+  boards: Board[];
 }) {
-  const { isOpen, onClose, exportParams } = props;
+  const { isOpen, onClose, exportParams, boards } = props;
   const { addToast, showToast } = useToast();
   const toast = addToast || showToast;
 
@@ -65,19 +67,22 @@ export function ContactsImportExportModal(props: {
   const [createCompanies, setCreateCompanies] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
+  const [targetBoardId, setTargetBoardId] = useState<string>('');
+  const [targetStageId, setTargetStageId] = useState<string>('');
 
   // Export state
   const [isExporting, setIsExporting] = useState(false);
 
   const templateCsv = useMemo(() => {
     const d: CsvDelimiter = delimiter === 'auto' ? ';' : delimiter;
-    const header = ['name', 'email', 'phone', 'role', 'company', 'status', 'stage', 'notes'];
+    const header = ['name', 'phone', 'email', 'company', 'instagram', 'role', 'status', 'stage', 'notes'];
     const example = [
       'Maria Silva',
-      'maria@empresa.com',
       '+55 11 99999-9999',
-      'Compras',
+      'maria@empresa.com',
       'Empresa Exemplo',
+      '@maria.silva',
+      'Compras',
       'ACTIVE',
       'LEAD',
       'Conheci em evento',
@@ -145,6 +150,10 @@ export function ContactsImportExportModal(props: {
       fd.append('mode', mode);
       fd.append('createCompanies', String(createCompanies));
       if (delimiter !== 'auto') fd.append('delimiter', delimiter);
+      if (targetBoardId && targetStageId) {
+        fd.append('boardId', targetBoardId);
+        fd.append('stageId', targetStageId);
+      }
 
       const res = await fetch('/api/contacts/import', { method: 'POST', body: fd });
       const data = await res.json().catch(() => null);
@@ -163,6 +172,11 @@ export function ContactsImportExportModal(props: {
       setIsImporting(false);
     }
   };
+
+  const selectedBoard = useMemo(
+    () => boards.find(board => board.id === targetBoardId) || null,
+    [boards, targetBoardId]
+  );
 
   return (
     <Modal
@@ -313,6 +327,54 @@ export function ContactsImportExportModal(props: {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300">
+                Board do negócio (opcional)
+              </label>
+              <select
+                value={targetBoardId}
+                onChange={e => {
+                  const nextBoardId = e.target.value;
+                  setTargetBoardId(nextBoardId);
+                  if (!nextBoardId) {
+                    setTargetStageId('');
+                    return;
+                  }
+                  const firstStageId = boards.find(board => board.id === nextBoardId)?.stages?.[0]?.id || '';
+                  setTargetStageId(firstStageId);
+                }}
+                className="w-full text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 px-3 py-2"
+              >
+                <option value="">Não criar negócio</option>
+                {boards.map(board => (
+                  <option key={board.id} value={board.id}>
+                    {board.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300">
+                Coluna de entrada
+              </label>
+              <select
+                value={targetStageId}
+                onChange={e => setTargetStageId(e.target.value)}
+                disabled={!selectedBoard}
+                className="w-full text-sm rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 px-3 py-2 disabled:opacity-60"
+              >
+                {!selectedBoard && <option value="">Selecione um board</option>}
+                {selectedBoard?.stages?.map(stage => (
+                  <option key={stage.id} value={stage.id}>
+                    {stage.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           <div className="space-y-1">
           <label className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-200">
             <input
@@ -354,6 +416,7 @@ export function ContactsImportExportModal(props: {
                 <b>Resumo:</b> {importResult.totals?.created ?? 0} criados •{' '}
                 {importResult.totals?.updated ?? 0} atualizados •{' '}
                 {importResult.totals?.skipped ?? 0} ignorados •{' '}
+                {importResult.totals?.dealsCreated ?? 0} negócios criados •{' '}
                 {importResult.totals?.errors ?? 0} erros
               </div>
               {(importResult.totals?.errors ?? 0) > 0 && (
@@ -372,4 +435,3 @@ export function ContactsImportExportModal(props: {
     </Modal>
   );
 }
-
