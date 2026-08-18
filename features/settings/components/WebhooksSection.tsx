@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Webhook, ArrowRight, Copy, Check, Link as LinkIcon, Pencil, Power, Trash2, KeyRound, HelpCircle } from 'lucide-react';
+import { Webhook, ArrowRight, Copy, Check, Link as LinkIcon, Pencil, Power, Trash2, KeyRound, HelpCircle, Plus, X } from 'lucide-react';
 import { SettingsSection } from './SettingsSection';
 import { Modal } from '@/components/ui/Modal';
 import ConfirmModal from '@/components/ConfirmModal';
@@ -7,7 +7,14 @@ import { useBoards } from '@/context/boards/BoardsContext';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
+import { useSettings } from '@/context/settings/SettingsContext';
 import { cn } from '@/lib/utils/cn';
+
+type FieldMappingEntry = {
+  source_key: string;
+  target_entity: 'deal' | 'contact';
+  target_key: string;
+};
 
 type InboundSourceRow = {
   id: string;
@@ -16,6 +23,7 @@ type InboundSourceRow = {
   entry_stage_id: string;
   secret: string;
   active: boolean;
+  field_mapping?: FieldMappingEntry[] | null;
 };
 
 type OutboundEndpointRow = {
@@ -75,6 +83,7 @@ export const WebhooksSection: React.FC = () => {
   const { profile } = useAuth();
   const { addToast } = useToast();
   const { boards, loading: boardsLoading } = useBoards();
+  const { customFieldDefinitions } = useSettings();
 
   const [sources, setSources] = useState<InboundSourceRow[]>([]);
   const [endpoint, setEndpoint] = useState<OutboundEndpointRow | null>(null);
@@ -107,6 +116,11 @@ export const WebhooksSection: React.FC = () => {
   const [confirmDeleteInboundOpen, setConfirmDeleteInboundOpen] = useState(false);
   const [confirmDeleteOutboundOpen, setConfirmDeleteOutboundOpen] = useState(false);
 
+  // Mapeamento de campos personalizados (inbound)
+  const [fieldMapping, setFieldMapping] = useState<FieldMappingEntry[]>([]);
+  const [fieldMappingSaving, setFieldMappingSaving] = useState(false);
+  const [fieldMappingDirty, setFieldMappingDirty] = useState(false);
+
   const canUse = profile?.role === 'admin' && !!profile?.organization_id;
 
   const activeInbound = useMemo(() => sources.find((s) => s.active) || sources[0] || null, [sources]);
@@ -132,7 +146,7 @@ export const WebhooksSection: React.FC = () => {
     try {
       const { data: srcData } = await supabase
         .from('integration_inbound_sources')
-        .select('id,name,entry_board_id,entry_stage_id,secret,active')
+        .select('id,name,entry_board_id,entry_stage_id,secret,active,field_mapping')
         .order('created_at', { ascending: false });
       setSources((srcData as any) || []);
 
@@ -167,6 +181,56 @@ export const WebhooksSection: React.FC = () => {
       setSelectedStageId(preferred.id);
     }
   }, [stages, selectedStageId]);
+
+  React.useEffect(() => {
+    setFieldMapping(activeInbound?.field_mapping || []);
+    setFieldMappingDirty(false);
+  }, [activeInbound?.id, activeInbound?.field_mapping]);
+
+  function addMappingRow() {
+    setFieldMapping((prev) => [...prev, { source_key: '', target_entity: 'deal', target_key: '' }]);
+    setFieldMappingDirty(true);
+  }
+
+  function updateMappingRow(index: number, updates: Partial<FieldMappingEntry>) {
+    setFieldMapping((prev) => prev.map((row, i) => (i === index ? { ...row, ...updates } : row)));
+    setFieldMappingDirty(true);
+  }
+
+  function removeMappingRow(index: number) {
+    setFieldMapping((prev) => prev.filter((_, i) => i !== index));
+    setFieldMappingDirty(true);
+  }
+
+  async function saveFieldMapping() {
+    if (!canUse) return;
+    if (!activeInbound?.id) return;
+
+    const cleaned = fieldMapping
+      .map((row) => ({
+        source_key: (row.source_key || '').trim(),
+        target_entity: row.target_entity === 'contact' ? 'contact' : 'deal',
+        target_key: (row.target_key || '').trim(),
+      }))
+      .filter((row) => row.source_key && row.target_key);
+
+    setFieldMappingSaving(true);
+    try {
+      const { error } = await supabase
+        .from('integration_inbound_sources')
+        .update({ field_mapping: cleaned })
+        .eq('id', activeInbound.id);
+      if (error) throw error;
+      setFieldMapping(cleaned as FieldMappingEntry[]);
+      setFieldMappingDirty(false);
+      addToast('Mapeamento de campos salvo.', 'success');
+      await loadWebhooks();
+    } catch (e: any) {
+      addToast(e?.message || 'Erro ao salvar mapeamento de campos', 'error');
+    } finally {
+      setFieldMappingSaving(false);
+    }
+  }
 
   async function copy(text: string, key: string) {
     await navigator.clipboard.writeText(text);
@@ -992,6 +1056,108 @@ export const WebhooksSection: React.FC = () => {
                       <code className="font-mono">company_name</code> e <code className="font-mono">deal_title</code>.
                     </div>
                   </div>
+
+                  {activeInbound ? (
+                    <div className="p-4 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-3">
+                      <div>
+                        <div className="text-sm font-bold text-slate-900 dark:text-white">
+                          Mapeamento de campos personalizados
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                          Envie qualquer campo extra no payload (ex.: <code className="font-mono">cnpj</code>,{' '}
+                          <code className="font-mono">utm_campaign</code>) e diga aqui em qual{' '}
+                          <b>Campo Personalizado</b> do negócio ou do contato ele deve ser gravado. Configure os
+                          campos disponíveis em <b>Configurações → Campos Personalizados</b>.
+                        </p>
+                      </div>
+
+                      {customFieldDefinitions.length === 0 ? (
+                        <div className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-xl p-3">
+                          Você ainda não criou nenhum Campo Personalizado. Crie um em{' '}
+                          <b>Configurações → Campos Personalizados</b> para poder mapeá-lo aqui.
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {fieldMapping.length === 0 ? (
+                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                              Nenhum campo mapeado ainda.
+                            </div>
+                          ) : (
+                            fieldMapping.map((row, idx) => (
+                              <div
+                                key={idx}
+                                className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr_auto] gap-2 items-center"
+                              >
+                                <input
+                                  value={row.source_key}
+                                  onChange={(e) => updateMappingRow(idx, { source_key: e.target.value })}
+                                  placeholder="campo no payload (ex.: cnpj)"
+                                  className="px-3 py-2 text-sm bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-primary-500 text-slate-900 dark:text-white"
+                                />
+                                <ArrowRight className="h-4 w-4 text-slate-400 hidden md:block" />
+                                <div className="flex gap-2">
+                                  <select
+                                    value={row.target_entity}
+                                    onChange={(e) =>
+                                      updateMappingRow(idx, {
+                                        target_entity: e.target.value === 'contact' ? 'contact' : 'deal',
+                                        target_key: '',
+                                      })
+                                    }
+                                    className="px-2 py-2 text-sm bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-slate-900 dark:text-white"
+                                  >
+                                    <option value="deal">Negócio</option>
+                                    <option value="contact">Contato</option>
+                                  </select>
+                                  <select
+                                    value={row.target_key}
+                                    onChange={(e) => updateMappingRow(idx, { target_key: e.target.value })}
+                                    className="flex-1 px-2 py-2 text-sm bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-slate-900 dark:text-white"
+                                  >
+                                    <option value="">Campo personalizado...</option>
+                                    {customFieldDefinitions
+                                      .filter((f) => (f.entityType || 'deal') === row.target_entity)
+                                      .map((f) => (
+                                        <option key={f.id} value={f.key}>
+                                          {f.label}
+                                        </option>
+                                      ))}
+                                  </select>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeMappingRow(idx)}
+                                  className="inline-flex items-center justify-center h-9 w-9 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-300 transition-colors"
+                                  aria-label="Remover mapeamento"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </div>
+                            ))
+                          )}
+
+                          <div className="flex items-center justify-between pt-1">
+                            <button
+                              type="button"
+                              onClick={addMappingRow}
+                              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                              Adicionar campo
+                            </button>
+                            <button
+                              type="button"
+                              onClick={saveFieldMapping}
+                              disabled={fieldMappingSaving || !fieldMappingDirty}
+                              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                            >
+                              {fieldMappingSaving ? 'Salvando...' : 'Salvar mapeamento'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
 
                   <div className="flex items-center justify-between">
             <button
