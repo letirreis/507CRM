@@ -53,7 +53,60 @@ type LeadPayload = {
   title?: string;
   value?: number | string;
   company?: string;
+
+  // Payload pode trazer qualquer outro campo arbitrário (para field_mapping)
+  [key: string]: unknown;
 };
+
+type FieldMappingEntry = {
+  source_key: string;
+  target_entity?: "deal" | "contact";
+  target_key: string;
+};
+
+/** Lê um valor do payload por "path" simples com ponto (ex.: "utm.campaign"). */
+function getByPath(obj: Record<string, unknown>, path: string): unknown {
+  if (!path) return undefined;
+  const parts = path.split(".").map((p) => p.trim()).filter(Boolean);
+  let cur: unknown = obj;
+  for (const p of parts) {
+    if (cur == null || typeof cur !== "object") return undefined;
+    cur = (cur as Record<string, unknown>)[p];
+  }
+  return cur;
+}
+
+/**
+ * Aplica o `field_mapping` configurado na fonte inbound sobre o payload recebido,
+ * retornando os valores extras a gravar em `deals.custom_fields` e `contacts.custom_fields`.
+ */
+function applyFieldMapping(
+  mapping: FieldMappingEntry[] | null | undefined,
+  payload: Record<string, unknown>
+): { dealFields: Record<string, unknown>; contactFields: Record<string, unknown> } {
+  const dealFields: Record<string, unknown> = {};
+  const contactFields: Record<string, unknown> = {};
+  if (!Array.isArray(mapping)) return { dealFields, contactFields };
+
+  for (const entry of mapping) {
+    if (!entry || typeof entry !== "object") continue;
+    const sourceKey = toNullableString((entry as FieldMappingEntry).source_key);
+    const targetKey = toNullableString((entry as FieldMappingEntry).target_key);
+    if (!sourceKey || !targetKey) continue;
+
+    const value = getByPath(payload, sourceKey);
+    if (value === undefined || value === null || value === "") continue;
+
+    const targetEntity = (entry as FieldMappingEntry).target_entity === "contact" ? "contact" : "deal";
+    if (targetEntity === "contact") {
+      contactFields[targetKey] = value;
+    } else {
+      dealFields[targetKey] = value;
+    }
+  }
+
+  return { dealFields, contactFields };
+}
 
 const corsHeaders = {
   // NOTE: Para chamadas a partir do browser (UI "Enviar teste") precisamos de CORS.
@@ -181,7 +234,7 @@ Deno.serve(async (req) => {
 
   const { data: source, error: sourceErr } = await supabase
     .from("integration_inbound_sources")
-    .select("id, organization_id, entry_board_id, entry_stage_id, secret, active")
+    .select("id, organization_id, entry_board_id, entry_stage_id, secret, active, field_mapping")
     .eq("id", sourceId)
     .maybeSingle();
 
@@ -203,6 +256,10 @@ Deno.serve(async (req) => {
   const companyName = getCompanyName(payload);
   const dealTitleFromPayload = getDealTitle(payload);
   const dealValue = getDealValue(payload);
+  const { dealFields: mappedDealFields, contactFields: mappedContactFields } = applyFieldMapping(
+    (source as any).field_mapping as FieldMappingEntry[] | null,
+    payload as unknown as Record<string, unknown>
+  );
 
   // 1) Auditoria/dedupe (idempotente quando external_event_id existe)
   if (externalEventId) {
@@ -297,7 +354,7 @@ Deno.serve(async (req) => {
 
     const { data: existingContacts, error: findErr } = await supabase
       .from("contacts")
-      .select("id, name, email, phone, organization_id")
+      .select("id, name, email, phone, organization_id, custom_fields")
       .eq("organization_id", source.organization_id)
       .or(filters.join(","))
       .limit(1);
@@ -316,6 +373,10 @@ Deno.serve(async (req) => {
       if (clientCompanyId) updates.client_company_id = clientCompanyId;
       if (payload.notes) updates.notes = payload.notes;
       if (payload.source) updates.source = payload.source;
+      if (Object.keys(mappedContactFields).length > 0) {
+        const existingCustom = (existing as any).custom_fields || {};
+        updates.custom_fields = { ...existingCustom, ...mappedContactFields };
+      }
 
       if (Object.keys(updates).length > 0) {
         const { error: updErr } = await supabase
@@ -339,6 +400,7 @@ Deno.serve(async (req) => {
           company_name: companyName,
           client_company_id: clientCompanyId,
           notes: payload.notes || null,
+          ...(Object.keys(mappedContactFields).length > 0 ? { custom_fields: mappedContactFields } : {}),
         })
         .select("id")
         .single();
@@ -360,7 +422,7 @@ Deno.serve(async (req) => {
   if (contactId) {
     const { data: existingDeal, error: findDealErr } = await supabase
       .from("deals")
-      .select("id, stage_id, is_won, is_lost")
+      .select("id, stage_id, is_won, is_lost, custom_fields")
       .eq("organization_id", source.organization_id)
       .eq("board_id", source.entry_board_id)
       .eq("contact_id", contactId)
@@ -387,7 +449,10 @@ Deno.serve(async (req) => {
 
       // mantém stage atual (não “puxa” de volta pro stage de entrada)
       // apenas carimba metadados do inbound
+      const existingDealCustomFields = (existingDeal as any).custom_fields || {};
       updates.custom_fields = {
+        ...existingDealCustomFields,
+        ...mappedDealFields,
         inbound_source_id: source.id,
         inbound_external_event_id: externalEventId,
         inbound_company_name: companyName,
@@ -418,6 +483,7 @@ Deno.serve(async (req) => {
         last_stage_change_date: new Date().toISOString(),
         tags: ["Novo"],
         custom_fields: {
+          ...mappedDealFields,
           inbound_source_id: source.id,
           inbound_external_event_id: externalEventId,
           inbound_company_name: companyName,
