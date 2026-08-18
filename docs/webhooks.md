@@ -103,6 +103,23 @@ Campos aceitos (todos opcionais, mas recomenda-se enviar pelo menos `email` ou `
 - `notes` (string)
 - `company_name` (string)
 
+### Mapeamento de campos personalizados
+
+Além dos campos fixos acima, você pode mapear **qualquer campo extra** do payload para um
+**Campo Personalizado** (`Configurações → Campos Personalizados`) do negócio ou do contato.
+
+- Configure em `Configurações → Integrações → Webhooks → Ajustar/Testar → Conexão`.
+- Crie antes os Campos Personalizados que quer usar como destino (em `Configurações → Campos Personalizados`).
+- Para cada linha do mapeamento, informe:
+  - **campo no payload** (ex.: `cnpj`, `utm_campaign`; aceita path com ponto, ex.: `utm.campaign` para objetos aninhados)
+  - **destino**: Negócio ou Contato
+  - **campo personalizado** de destino (a `key` do Campo Personalizado)
+- O valor é gravado em `deals.custom_fields` ou `contacts.custom_fields` (mesclado com o que já existir).
+- Isso é persistido em `integration_inbound_sources.field_mapping` (array de `{ source_key, target_entity, target_key }`).
+
+Exemplo: se você mapear `cnpj` → Negócio → `cnpj`, enviando `{"cnpj": "12.345.678/0001-90", ...}` no payload,
+o negócio criado/atualizado terá `custom_fields.cnpj = "12.345.678/0001-90"`.
+
 ### Comportamento (o que o CRM faz)
 
 Ao receber o `POST`, o handler (`supabase/functions/webhook-in/index.ts`):
